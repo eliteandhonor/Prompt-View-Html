@@ -1,0 +1,13 @@
+parameters:
+  level: 5
+  paths:
+    - public_html/db.php
+    - public_html/Logger.php
+    - public_html/db.local.health.php
+  autoload_files:
+    - public_html/db.php
+    - public_html/Logger.php
+  excludes_analyse:
+    - tests/**
+    - node_modules/**
+  reportUnmatchedIgnoredErrors: false

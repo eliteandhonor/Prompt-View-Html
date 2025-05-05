@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<ruleset name="PromptView PHPCS">
+  <description>PHP_CodeSniffer rules for Prompt View HTML project.</description>
+  <file>public_html/Logger.php</file>
+  <file>public_html/db.php</file>
+  <file>public_html/db.local.health.php</file>
+  <exclude-pattern>node_modules/*</exclude-pattern>
+  <exclude-pattern>public_html/data/*</exclude-pattern>
+  <exclude-pattern>tests/*</exclude-pattern>
+  <rule ref="PSR12"/>
+  <arg name="basepath" value="."/>
+</ruleset>

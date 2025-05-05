@@ -1,0 +1,14 @@
+{
+  "extends": "stylelint-config-standard",
+  "ignoreFiles": [
+    "node_modules/**",
+    "public_html/**/*.min.css"
+  ],
+  "rules": {
+    "color-hex-case": "lower",
+    "string-quotes": "double",
+    "block-no-empty": true,
+    "declaration-block-trailing-semicolon": "always",
+    "no-duplicate-selectors": true
+  }
+}
