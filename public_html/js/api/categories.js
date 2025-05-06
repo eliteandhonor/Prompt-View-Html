@@ -17,7 +17,7 @@ export async function fetchCategories() {
     }
     const data = await res.json();
     console.log("[fetchCategories] Data received:", data);
-    return data;
+    return data.categories || [];
   } catch (err) {
     console.error("[fetchCategories] Exception:", err);
     throw err;

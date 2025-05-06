@@ -1,5 +1,20 @@
 # LLM Prompt Sharing & Community App
 
+## Project Structure
+
+- `public_html/`
+  Main application code (frontend, backend, assets, config, tests).
+- `public_html/js/`
+  Modular JavaScript source (UI, API, state, utilities).
+- `public_html/db_parts/`
+  Backend PHP modules and config.
+- `public_html/test/`
+  Unit and integration tests (QUnit, Playwright).
+- `public_html/legacy/`
+  **Legacy code** (unused, for reference only; see `legacy/README.md`).
+- `AUDIT_LOG.md`
+  Accessibility, compliance, and audit policies.
+
 ## Modular Architecture Overview
 
 This project is architected for maintainability, security, and rapid feature extension. Its modular design centers around three pillars:
@@ -92,7 +107,8 @@ See code comments in `js/state/store.js` and `js/ui/ui.js` for in-depth examples
 - **Modular, Single-Source Logic:** Duplications removed; all common logic in dedicated modules.
 - **Explicit DOM Event Management:** Handlers modularized, not inlined or global.
 - **Centralized Security:** All content passed through a single, auditable pipeline.
-- **No Legacy/Obsolete Files:** Previous files (`js/markdown.js`, `js/db.js`, etc.) are deleted; no split logic remains.
+- **Legacy/Obsolete Files Clearly Marked:** Previous files (`js/markdown.js`, `js/db.js`, etc.) are deleted; no split logic remains.
+  The `public_html/legacy/` directory contains unused legacy code, retained for reference only and not part of the active application.
 - **Strict Separation of Concerns:** API, UI, and utility layers communicate via clear, minimal interfaces.
 - **Accessibility First:** Full keyboard/ARIA support, animation and focus management tested across devices.
 - **Atomic, Testable Functions:** Critical logic is stateless and easily unit-tested.
@@ -137,14 +153,55 @@ See code comments in `js/state/store.js` and `js/ui/ui.js` for in-depth examples
 - **Theming & Accessibility:** Modular CSS (including dark theme), custom animations, mobile-friendly/responsive.
 - **Extensible Core:** New modules/UI extensions can be added without modifying legacy files or global state.
 
-## Running & Deployment
+## Setup, Running & Deployment
 
-- **Always use an HTTP server** (never open index.html as file://):
-  - VS Code Live Server,  
-    `python3 -m http.server`,  
-    `npx http-server`, etc.  
-    Visit [http://localhost:8000](http://localhost:8000) or your port.
-- **Production:** Upload `/public_html` to your web host’s `public_html`, overwriting if updating.
+### Prerequisites
+
+- Node.js (for linting and development tools)
+- PHP 7.4+ (for backend API)
+- Modern browser (for running and testing frontend)
+- (Optional) Python 3 or VS Code Live Server for local HTTP server
+
+### Install & Run (Development)
+
+1. Clone or download the repository.
+2. Ensure `public_html/db.php`, `prompts.json`, `comments.json`, and `results.json` exist and are writeable (see permissions below).
+3. Start a local HTTP server in `public_html/`:
+   - `php -S localhost:8000 -t public_html`
+   - or `python3 -m http.server` (in `public_html/`)
+   - or use VS Code Live Server
+4. Visit [http://localhost:8000](http://localhost:8000) in your browser.
+
+### Linting & Testing
+
+- Run all tests: open [`/test/index.html`](./test/index.html) in your browser.
+- Lint JS: `npx eslint .`
+- (Optional) Run Playwright tests: see `/test/playwright/`
+
+### Production
+
+- Upload `/public_html` to your web host’s `public_html`, overwriting if updating.
+
+## API Endpoints (Summary)
+
+All endpoints are under `/public_html/api/` or `/public_html/db.php`:
+
+- `api/prompts.php`
+  CRUD for prompts (GET, POST, PUT, DELETE)
+- `api/comments.php`
+  CRUD for comments
+- `api/categories.php`
+  List categories
+- `api/tags.php`
+  List tags
+- `api/results.php`
+  CRUD for results
+- `db.php?action=health`
+  Health check (JSON)
+- `db.php?action=selftest`
+  Backend self-test
+
+See inline comments in each file for full parameter and response details.
 
 ## Backend/Permissions
 
@@ -188,6 +245,17 @@ See code comments in `js/state/store.js` and `js/ui/ui.js` for in-depth examples
 - **Documentation:** All accessibility, compliance, audit, onboarding, and policy standards are now documented solely in [AUDIT_LOG.md](../AUDIT_LOG.md) as the canonical source.
 
 For all onboarding, accessibility, compliance, audit, and contributor or review policies and checklists, see [AUDIT_LOG.md](../AUDIT_LOG.md). That file is now the sole canonical source for these requirements. Summary: All UI, security, and access control compliance is implemented in accordance with those procedures. The codebase and workflow always enforce accessibility, audit, a11y, and review standards as described in AUDIT_LOG.md. Refer to AUDIT_LOG.md to understand policies, requirements, and the review/extension process.
+
+## Known Limitations
+
+- The legacy codebase is present in `public_html/legacy/` for reference only and is not maintained.
+- Authentication is stubbed; all users are anonymous by default.
+- No rate limiting or advanced anti-abuse in production mode.
+- File-based backend may not scale for high-concurrency or large datasets.
+- API endpoints are not versioned.
+- No built-in email or notification system.
+- Accessibility and compliance are enforced per [AUDIT_LOG.md](../AUDIT_LOG.md), but further review may be required for specific deployments.
+
 ## Troubleshooting
 
 - “Cannot use import statement outside a module”? Run via HTTP, not file://.

@@ -3,6 +3,11 @@
 const { test, expect } = require('@playwright/test');
 
 test('homepage loads and shows page title', async ({ page }) => {
+  // Capture and print all browser console logs for maximum debug output
+  page.on('console', msg => {
+    console.log(`[BROWSER][${msg.type()}]`, msg.text());
+  });
+
   // Navigate to the base URL (root served by PHP dev server)
   await page.goto('/');
 

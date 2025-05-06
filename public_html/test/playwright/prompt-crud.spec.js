@@ -32,7 +32,19 @@ async function createPrompt(page, title, content) {
   await expect(page.locator('[data-testid="prompt-title-input"]')).toBeVisible();
   await page.fill('[data-testid="prompt-title-input"]', title);
   await page.fill('[data-testid="prompt-content-input"]', content);
+
+  // Attach a listener for promptListReady BEFORE submitting the form
+  await page.evaluate(() => {
+    window.__promptListReadyPromise = new Promise(resolve => {
+      window.addEventListener('promptListReady', () => resolve(), { once: true });
+    });
+  });
+
   await page.click('[data-testid="save-prompt-btn"]');
+
+  // Wait for the promptListReady event to fire
+  await page.evaluate(() => window.__promptListReadyPromise);
+
   // Wait for either the prompt block or the prompt title to appear
   const promptBlockLocator = page.locator('[data-testid="prompt-block"]', { hasText: title }).first();
   const promptTitleLocator = page.locator('[data-testid="prompt-title"]', { hasText: title }).first();
@@ -43,6 +55,13 @@ async function createPrompt(page, title, content) {
   console.log("DIAGNOSTIC: Prompt titles in DOM after creation:", allTitles);
   return await promptTitleLocator.getAttribute('data-id');
 }
+
+/**
+ * Waits for the custom 'promptListReady' event on the page.
+ * @param {import('@playwright/test').Page} page
+ * @returns {Promise<void>}
+ */
+/* waitForPromptListReady removed: now handled within createPrompt */
 
 /**
  * Reads (views) a prompt by its data-id and asserts its title/content.
@@ -88,6 +107,13 @@ async function deletePrompt(page, promptId, promptTitle) {
 }
 
 test.describe('Prompt CRUD', () => {
+  test.beforeEach(async ({ page }) => {
+    // Capture and print all browser console logs for maximum debug output
+    page.on('console', msg => {
+      console.log(`[BROWSER][${msg.type()}]`, msg.text());
+    });
+  });
+
   test('can create, read, update, and delete a prompt', async ({ page }) => {
     try {
       // Step 1: Go to Prompts section
@@ -109,13 +135,27 @@ test.describe('Prompt CRUD', () => {
       await deletePrompt(page, promptId, updatedTitle);
 
     } catch (err) {
-      // Diagnostic: print modal system globals
-      const diag = await page.evaluate(() => ({
-        modalsInit: window.__modalsInit,
-        crudModalEventReceived: window.__crudModalEventReceived,
-        promptTitleInputPresent: window.__promptTitleInputPresent
-      }));
-      console.log("DIAGNOSTIC GLOBALS:", diag);
+      // Diagnostic: print error and check if page is closed before evaluating
+      console.log("DIAGNOSTIC: Caught error in CRUD test:", err && err.message);
+      let isClosed = false;
+      try {
+        await page.title();
+      } catch (e) {
+        isClosed = true;
+        console.log("DIAGNOSTIC: Page is already closed, skipping page.evaluate diagnostics.");
+      }
+      if (!isClosed) {
+        try {
+          const diag = await page.evaluate(() => ({
+            modalsInit: window.__modalsInit,
+            crudModalEventReceived: window.__crudModalEventReceived,
+            promptTitleInputPresent: window.__promptTitleInputPresent
+          }));
+          console.log("DIAGNOSTIC GLOBALS:", diag);
+        } catch (evalErr) {
+          console.log("DIAGNOSTIC: page.evaluate failed:", evalErr && evalErr.message);
+        }
+      }
       throw err;
     }
   });

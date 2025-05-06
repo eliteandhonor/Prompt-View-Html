@@ -1,88 +1,290 @@
+// TEST INJECTION - promptList.js
 // ui/promptList.js - KISS Prompt List UI (2025 Refactor with Full Logging)
 
-import { fetchPrompts } from '../api/prompts.js';
+import { fetchPrompts, createPrompt, deletePrompt } from '../api/prompts.js';
+import { renderPromptBlock } from './renderPromptBlock.js';
+import { renderCommentsResults } from './commentsResults.js';
+import { showConfirmModal } from './modals.js';
 
 export function initPromptList(params = {}) {
-  console.log("initPromptList: called", params);
+  // Debug mode flag for logging
+  const DEBUG_MODE = window.DEBUG_MODE || false;
+  function debugLog(...args) {
+    if (DEBUG_MODE) console.debug('[PromptList]', ...args);
+  }
+  debugLog("initPromptList: START", { params });
   let currentParams = { ...params };
 
+  // --- Global Prompt Card Action Listeners (Best Practice Architectural Fix) ---
+  // Handles prompt:edit and prompt:delete globally for accessible, robust CRUD
+
+  // Prevent duplicate listeners in hot reload/dev
+  if (!window.__promptCrudListenersAdded) {
+    window.addEventListener('prompt:edit', (e) => {
+      console.log('[promptList.js] [LOG] prompt:edit event fired', e);
+      debugLog('[LOG] prompt:edit event fired', e);
+      const prompt = e?.detail?.prompt;
+      console.log('[promptList.js] [LOG] prompt:edit received prompt:', prompt);
+      debugLog('[LOG] prompt:edit received prompt:', prompt);
+      if (!prompt) {
+        window.dispatchEvent(new CustomEvent('showToast', { detail: { message: 'Prompt data missing for edit.', type: 'error' } }));
+        return;
+      }
+      // Open CRUD modal in edit mode with prompt data
+      console.log('[promptList.js] [LOG] Dispatching openCrudModal for edit', prompt);
+      debugLog('[LOG] Dispatching openCrudModal for edit', prompt);
+      window.dispatchEvent(new CustomEvent('openCrudModal', { detail: { mode: 'edit', prompt } }));
+    });
+
+    window.addEventListener('prompt:delete', async (e) => {
+      console.log('[promptList.js] [LOG] prompt:delete event fired', e);
+      debugLog('[LOG] prompt:delete event fired', e);
+      const promptId = e?.detail?.promptId;
+      const prompt = e?.detail?.prompt;
+      console.log('[promptList.js] [LOG] prompt:delete received promptId:', promptId, 'prompt:', prompt);
+      debugLog('[LOG] prompt:delete received promptId:', promptId, 'prompt:', prompt);
+      if (!promptId) {
+        window.dispatchEvent(new CustomEvent('showToast', { detail: { message: 'Prompt ID missing for delete.', type: 'error' } }));
+        return;
+      }
+      // Accessible confirmation modal
+      console.log('[promptList.js] [LOG] Showing confirm modal for delete', promptId, prompt);
+      debugLog('[LOG] Showing confirm modal for delete', promptId, prompt);
+      const confirmed = await showConfirmModal(
+        `Are you sure you want to delete the prompt "${prompt?.title || promptId}"? This action cannot be undone.`
+      );
+      console.log('[promptList.js] [LOG] Delete confirmation result:', confirmed);
+      debugLog('[LOG] Delete confirmation result:', confirmed);
+      if (!confirmed) {
+        window.dispatchEvent(new CustomEvent('showToast', { detail: { message: 'Prompt deletion cancelled.', type: 'info' } }));
+        return;
+      }
+      try {
+        console.log('[promptList.js] [LOG] Calling deletePrompt API for', promptId);
+        debugLog('[LOG] Calling deletePrompt API for', promptId);
+        await deletePrompt(promptId);
+        console.log('[promptList.js] [LOG] Prompt deleted, dispatching UI update');
+        debugLog('[LOG] Prompt deleted, dispatching UI update');
+        window.dispatchEvent(new CustomEvent('showToast', { detail: { message: 'Prompt deleted.', type: 'success' } }));
+        // Refresh prompt list
+        window.dispatchEvent(new CustomEvent('filterPrompts', { detail: {} }));
+        // Accessibility: focus main content after deletion
+        setTimeout(() => {
+          const main = document.getElementById('main-content') || document.body;
+          if (main && typeof main.focus === 'function') main.focus();
+          console.log('[promptList.js] [LOG] Focused main content after delete');
+          debugLog('[LOG] Focused main content after delete');
+        }, 150);
+      } catch (err) {
+        console.log('[promptList.js] [LOG] Error deleting prompt:', err);
+        debugLog('[LOG] Error deleting prompt:', err);
+        window.dispatchEvent(new CustomEvent('showToast', { detail: { message: 'Error deleting prompt.', type: 'error' } }));
+      }
+    });
+    window.__promptCrudListenersAdded = true;
+  }
+  // --- End Global Prompt Card Action Listeners ---
+
+  // --- Global Result Delete Listener (KISS, pure safety) ---
+  if (!window.__resultDeleteListenerAdded) {
+    window.addEventListener('result:delete', async (e) => {
+      const { promptId, resultId, result, prompt } = e.detail || {};
+      debugLog('[LOG] result:delete event fired', e.detail);
+      if (!promptId || typeof resultId === 'undefined') {
+        window.dispatchEvent(new CustomEvent('showToast', { detail: { message: 'Missing prompt or result ID for delete.', type: 'error' } }));
+        return;
+      }
+      try {
+        // Call backend to delete result (if API exists)
+        if (window.deleteResult) {
+          await window.deleteResult(resultId);
+        }
+        // Remove result from prompt.results (pure safety: deep clone)
+        if (prompt && Array.isArray(prompt.results)) {
+          const idx = prompt.results.findIndex(r => (r.id || r) === resultId);
+          if (idx !== -1) {
+            prompt.results = [
+              ...prompt.results.slice(0, idx),
+              ...prompt.results.slice(idx + 1)
+            ];
+            debugLog('[LOG] Result removed from prompt.results', { promptId, resultId, idx });
+          }
+        }
+        // Re-render prompt list to reflect change
+        window.dispatchEvent(new CustomEvent('filterPrompts', { detail: {} }));
+        window.dispatchEvent(new CustomEvent('showToast', { detail: { message: 'Result deleted.', type: 'success' } }));
+      } catch (err) {
+        debugLog('[LOG] Error deleting result', err);
+        window.dispatchEvent(new CustomEvent('showToast', { detail: { message: 'Error deleting result.', type: 'error' } }));
+      }
+    });
+    window.__resultDeleteListenerAdded = true;
+  }
+
   function showModal(modalEl) {
-    console.log("showModal: called", modalEl);
+    debugLog("showModal: START", { modalEl });
     if (!modalEl) {
-      console.warn("showModal: modalEl is null");
+      debugLog("showModal: modalEl is null");
+      debugLog("showModal: END (modalEl null)");
       return;
     }
     modalEl.hidden = false;
     modalEl.setAttribute('aria-hidden', 'false');
+    modalEl.setAttribute('role', 'dialog');
+    modalEl.setAttribute('aria-modal', 'true');
     modalEl.classList.add('active');
     modalEl.focus();
     document.body.classList.add('modal-open');
+    debugLog("showModal: END", { modalEl });
   }
 
   function hideModal(modalEl) {
-    console.log("hideModal: called", modalEl);
+    debugLog("hideModal: START", { modalEl });
     if (!modalEl) {
-      console.warn("hideModal: modalEl is null");
+      debugLog("hideModal: modalEl is null");
+      debugLog("hideModal: END (modalEl null)");
       return;
     }
     modalEl.hidden = true;
     modalEl.setAttribute('aria-hidden', 'true');
     modalEl.classList.remove('active');
     document.body.classList.remove('modal-open');
+    debugLog("hideModal: END", { modalEl });
   }
 
-  function attachPromptListControlListeners() {
-    console.log("attachPromptListControlListeners: called");
-    const listViewBtn = document.getElementById('list-view-btn');
-    const gridViewBtn = document.getElementById('grid-view-btn');
-    const promptList = document.getElementById('prompt-list');
-    const addPromptBtn = document.getElementById('add-prompt-btn');
-    const importBtn = document.getElementById('import-prompts-btn');
-    const importInput = document.getElementById('import-file-input');
+  // Modularized control listeners for maintainability
+  function attachViewToggleListeners() {
+    debugLog("attachViewToggleListeners: START");
 
-    // View toggle
-    if (listViewBtn && gridViewBtn && promptList) {
-      listViewBtn.onclick = () => {
-        console.log("List View button clicked");
-        promptList.classList.remove('prompt-grid');
+    // --- Sticky Toolbar: Best Practice Check ---
+    // (No code change needed if #prompt-toolbar is at root and no parent has overflow: auto/hidden)
+
+    // --- Prompt List View Mode: Robust Initialization ---
+    const promptList = document.getElementById('prompt-list');
+    const promptListActions = document.getElementById('prompt-list-actions');
+    // Ensure toggle buttons exist
+    let listViewBtn = document.getElementById('list-view-btn');
+    let gridViewBtn = document.getElementById('grid-view-btn');
+    if (promptListActions && !listViewBtn && !gridViewBtn) {
+      const viewToggleContainer = document.createElement('div');
+      viewToggleContainer.style.display = 'flex';
+      viewToggleContainer.style.gap = '8px';
+      viewToggleContainer.style.justifyContent = 'center';
+      viewToggleContainer.style.marginBottom = '12px';
+      viewToggleContainer.innerHTML = `
+        <button id="list-view-btn" data-testid="list-view-btn" type="button" class="utility" aria-label="List View" tabindex="0" role="button">List View</button>
+        <button id="grid-view-btn" data-testid="grid-view-btn" type="button" class="utility" aria-label="Grid View" tabindex="0" role="button">Grid View</button>
+      `;
+      promptListActions.prepend(viewToggleContainer);
+      listViewBtn = document.getElementById('list-view-btn');
+      gridViewBtn = document.getElementById('grid-view-btn');
+    }
+
+    // Set default view mode if not present
+    let savedView = localStorage.getItem('promptViewMode');
+    if (!savedView) {
+      savedView = 'grid';
+      localStorage.setItem('promptViewMode', savedView);
+    }
+
+    // Always set the correct class on #prompt-list before first render
+    if (promptList) {
+      promptList.classList.remove('prompt-list', 'prompt-grid');
+      if (savedView === 'list') {
         promptList.classList.add('prompt-list');
+      } else {
+        promptList.classList.add('prompt-grid');
+      }
+    }
+
+    // Set toggle button active states
+    if (listViewBtn && gridViewBtn) {
+      if (savedView === 'list') {
         listViewBtn.classList.add('active');
         gridViewBtn.classList.remove('active');
-      };
-      gridViewBtn.onclick = () => {
-        console.log("Grid View button clicked");
-        promptList.classList.remove('prompt-list');
-        promptList.classList.add('prompt-grid');
+      } else {
         gridViewBtn.classList.add('active');
         listViewBtn.classList.remove('active');
+      }
+      listViewBtn.onclick = () => {
+        try {
+          debugLog("List View button clicked");
+          if (promptList) {
+            promptList.classList.remove('prompt-grid');
+            promptList.classList.add('prompt-list');
+          }
+          listViewBtn.classList.add('active');
+          gridViewBtn.classList.remove('active');
+          localStorage.setItem('promptViewMode', 'list');
+          if (typeof renderPrompts === 'function') renderPrompts();
+        } catch (err) {
+          debugLog("Error switching to list view:", err);
+        }
+      };
+      gridViewBtn.onclick = () => {
+        try {
+          debugLog("Grid View button clicked");
+          if (promptList) {
+            promptList.classList.remove('prompt-list');
+            promptList.classList.add('prompt-grid');
+          }
+          gridViewBtn.classList.add('active');
+          listViewBtn.classList.remove('active');
+          localStorage.setItem('promptViewMode', 'grid');
+          if (typeof renderPrompts === 'function') renderPrompts();
+        } catch (err) {
+          debugLog("Error switching to grid view:", err);
+        }
       };
     }
+  }
 
-    // Add Prompt
+  function attachAddPromptListener() {
+    debugLog("attachAddPromptListener: START");
+    const addPromptBtn = document.getElementById('add-prompt-btn');
     if (addPromptBtn) {
       addPromptBtn.onclick = () => {
-        console.log("Add Prompt button clicked");
-        window.dispatchEvent(new CustomEvent('openCrudModal', { detail: { mode: 'add' } }));
+        try {
+          debugLog("Add Prompt button clicked");
+          window.dispatchEvent(new CustomEvent('openCrudModal', { detail: { mode: 'add' } }));
+        } catch (err) {
+          debugLog("Error handling Add Prompt button:", err);
+        }
       };
     }
+  }
 
-    // Import Prompts
+  function attachBatchImportListener() {
+    debugLog("attachBatchImportListener: START");
+    const batchImportBtn = document.getElementById('batch-import-btn');
+    if (batchImportBtn) {
+      batchImportBtn.onclick = () => {
+        debugLog("Batch Import button clicked");
+        window.dispatchEvent(new CustomEvent('openBatchImportModal'));
+      };
+    }
+  }
+
+  function attachImportPromptsListener() {
+    debugLog("attachImportPromptsListener: START");
+    const importBtn = document.getElementById('import-prompts-btn');
+    const importInput = document.getElementById('import-file-input');
     if (importBtn && importInput) {
       importBtn.onclick = () => {
-        console.log("Import Prompts button clicked");
+        debugLog("Import Prompts button clicked");
         importInput.click();
       };
       importInput.onchange = async (e) => {
-        console.log("Import file input changed", importInput.files);
+        debugLog("Import file input changed", importInput.files);
         const files = Array.from(importInput.files || []);
         if (!files.length) {
-          console.warn("No files selected for import");
+          debugLog("No files selected for import");
           window.dispatchEvent(new CustomEvent('showToast', { detail: { message: 'No files selected.', type: 'error' } }));
           return;
         }
 
         function parsePromptFile(file, text) {
-          console.log("parsePromptFile: called", file.name);
+          debugLog("parsePromptFile: called", file.name);
           const lines = text.split(/\r?\n/);
           let title = lines[0].trim();
           let content = lines.slice(1).join('\n').trim();
@@ -108,14 +310,14 @@ export function initPromptList(params = {}) {
             });
             const prompt = parsePromptFile(file, text);
             if (!prompt.title || !prompt.content) {
-              console.warn(`File "${file.name}" missing title or content`);
+              debugLog(`File "${file.name}" missing title or content`);
               window.dispatchEvent(new CustomEvent('showToast', { detail: { message: `File "${file.name}" is missing a title or content.`, type: 'error' } }));
               continue;
             }
             promptObjs.push(prompt);
           }
           if (!promptObjs.length) {
-            console.warn("No valid prompts found in selected files");
+            debugLog("No valid prompts found in selected files");
             window.dispatchEvent(new CustomEvent('showToast', { detail: { message: 'No valid prompts found in selected files.', type: 'error' } }));
             importInput.value = '';
             return;
@@ -125,7 +327,7 @@ export function initPromptList(params = {}) {
           const crudModal = document.getElementById('crud-modal');
           const crudModalBody = document.getElementById('crud-modal-body');
           if (!crudModal || !crudModalBody) {
-            console.error("Import modal not found");
+            debugLog("Import modal not found");
             window.dispatchEvent(new CustomEvent('showToast', { detail: { message: 'Import modal not found.', type: 'error' } }));
             importInput.value = '';
             return;
@@ -147,21 +349,21 @@ export function initPromptList(params = {}) {
           showModal(crudModal);
 
           document.getElementById('confirm-import-btn').onclick = async () => {
-            console.log("Confirm Import button clicked");
+            debugLog("Confirm Import button clicked");
             const progressDiv = document.getElementById('import-progress');
             let successCount = 0;
             let failCount = 0;
             progressDiv.textContent = 'Importing...';
             for (const [i, prompt] of promptObjs.entries()) {
               try {
-                await import('../api/prompts.js').then(mod => mod.createPrompt(prompt));
+                await createPrompt(prompt);
                 successCount++;
                 progressDiv.textContent = `Imported ${successCount}/${promptObjs.length}`;
-                console.log(`Prompt imported: ${prompt.title}`);
+                debugLog(`Prompt imported: ${prompt.title}`);
               } catch (err) {
                 failCount++;
                 progressDiv.textContent = `Imported ${successCount}/${promptObjs.length}, failed ${failCount}`;
-                console.error("Failed to import prompt", prompt, err);
+                debugLog("Failed to import prompt", prompt, err);
               }
             }
             window.dispatchEvent(new CustomEvent('showToast', { detail: { message: `Imported ${successCount} prompt(s).${failCount ? ' ' + failCount + ' failed.' : ''}`, type: failCount ? 'warning' : 'success' } }));
@@ -171,17 +373,26 @@ export function initPromptList(params = {}) {
           };
 
           document.getElementById('cancel-import-btn').onclick = () => {
-            console.log("Cancel Import button clicked");
+            debugLog("Cancel Import button clicked");
             hideModal(crudModal);
             importInput.value = '';
           };
         } catch (err) {
-          console.error("Error reading files for import", err);
+          debugLog("Error reading files for import", err);
           window.dispatchEvent(new CustomEvent('showToast', { detail: { message: 'Error reading files.', type: 'error' } }));
           importInput.value = '';
         }
       };
     }
+  }
+
+  // Main function to attach all control listeners
+  function attachPromptListControlListeners() {
+    debugLog("attachPromptListControlListeners: START");
+    attachViewToggleListeners();
+    attachAddPromptListener();
+    attachBatchImportListener();
+    attachImportPromptsListener();
   }
 
   // Attach listeners on init and whenever section is shown
@@ -190,10 +401,14 @@ export function initPromptList(params = {}) {
   // Listen for section visibility changes and re-attach listeners
   const promptListSection = document.getElementById('prompt-list-section');
   if (promptListSection) {
+    let listenersAttached = false;
     const observer = new MutationObserver(() => {
-      if (promptListSection.style.display !== 'none') {
-        console.log("prompt-list-section is now visible, re-attaching listeners");
+      if (promptListSection.style.display !== 'none' && !listenersAttached) {
+        debugLog("prompt-list-section is now visible, attaching listeners (idempotent)");
         attachPromptListControlListeners();
+        listenersAttached = true;
+      } else if (promptListSection.style.display === 'none') {
+        listenersAttached = false;
       }
     });
     observer.observe(promptListSection, { attributes: true, attributeFilter: ['style'] });
@@ -201,7 +416,7 @@ export function initPromptList(params = {}) {
 
   // Listen for filterPrompts event (myPrompts, category, tag)
   window.addEventListener('filterPrompts', (e) => {
-    console.log("[DIAG] filterPrompts event received", e.detail, "at", new Date().toISOString());
+    debugLog("[DIAG] filterPrompts event received", e.detail, "at", new Date().toISOString());
     if (e.detail) {
       if ('myPrompts' in e.detail) {
         if (e.detail.myPrompts) {
@@ -225,94 +440,148 @@ export function initPromptList(params = {}) {
         }
       }
     }
-    console.log("[DIAG] Calling renderPrompts() after filterPrompts at", new Date().toISOString());
+    debugLog("[DIAG] Calling renderPrompts() after filterPrompts at", new Date().toISOString());
     renderPrompts();
   });
 
   function renderPrompts() {
-    console.log("[DIAG] renderPrompts: called with params", currentParams, "at", new Date().toISOString());
+    debugLog("renderPrompts: START", { currentParams });
     const promptList = document.getElementById('prompt-list');
     const loading = document.getElementById('prompt-list-loading');
     if (loading) loading.classList.remove('hidden');
     if (promptList) {
       promptList.innerHTML = '';
-      fetchPrompts(currentParams)
-        .then(prompts => {
-          console.log("[DIAG] renderPrompts: fetchPrompts resolved", prompts, "at", new Date().toISOString());
-          // [DEBUG] Log all prompt titles being rendered
-          console.log("[DEBUG] Prompt titles to render:", prompts.map(p => p.title));
-          // [DEBUG] Log current search/filter input if present
-          const searchInput = document.querySelector('[data-testid="prompt-search-input"]');
-          if (searchInput) {
-            console.log("[DEBUG] Current search/filter value:", searchInput.value);
-          }
-          if (loading) loading.classList.add('hidden');
-          if (Array.isArray(prompts) && prompts.length > 0) {
-            promptList.innerHTML = prompts
-              .map(prompt => `
-                <div class="prompt-block" data-testid="prompt-block" data-id="${prompt.id}" tabindex="0" aria-label="Prompt: ${prompt.title}">
-                  <h3 data-testid="prompt-title" data-id="${prompt.id}">${prompt.title}</h3>
-                  <p>${prompt.description || ''}</p>
-                  <div class="prompt-meta">
-                    <span>By: ${prompt.author || 'Unknown'}</span>
-                    <span>Category: ${prompt.category || 'Uncategorized'}</span>
-                    <span>Tags: ${(prompt.tags || []).join(', ')}</span>
-                  </div>
-                </div>
-              `)
-              .join('');
-            // [DIAG] Log after prompt is rendered in DOM
-            const renderedTitles = Array.from(promptList.querySelectorAll('[data-testid="prompt-title"]')).map(el => ({
-              id: el.getAttribute('data-id'),
-              text: el.textContent
-            }));
-            console.log("[DIAG] Prompts rendered in DOM:", renderedTitles, "at", new Date().toISOString());
-
-            // Wire up prompt block and prompt title click to open detail modal
-            promptList.querySelectorAll('.prompt-block').forEach(block => {
-              const id = block.getAttribute('data-id');
-              const prompt = prompts.find(p => String(p.id) === String(id));
-              // Card click
-              block.addEventListener('click', (e) => {
-                if (prompt) {
-                  window.dispatchEvent(new CustomEvent('openCrudModal', { detail: { mode: 'view', prompt } }));
-                }
-              });
-              // Title click
-              const title = block.querySelector('[data-testid="prompt-title"]');
-              if (title) {
-                title.addEventListener('click', (e) => {
-                  e.stopPropagation();
-                  if (prompt) {
-                    window.dispatchEvent(new CustomEvent('openCrudModal', { detail: { mode: 'view', prompt } }));
-                  }
-                });
-              }
-            });
+      // Log current view mode and parent class for diagnosis
+      const viewMode = promptList.classList.contains('prompt-list') ? 'list' : (promptList.classList.contains('prompt-grid') ? 'grid' : 'unknown');
+      debugLog("[DIAG] renderPrompts: promptList classList", promptList.classList.value, "viewMode", viewMode);
+      // Fetch prompts, categories, and tags in parallel
+      Promise.all([
+        fetchPrompts(currentParams),
+        import('../api/categories.js').then(mod => mod.fetchCategories()),
+        import('../api/tags.js').then(mod => mod.fetchTags())
+      ])
+      .then(([prompts, categories, tags]) => {
+        if (loading) loading.classList.add('hidden');
+        if (Array.isArray(prompts) && prompts.length > 0) {
+          debugLog("renderPrompts: prompts to render", { prompts, categories, tags });
+          // Keep global app state in sync for modal lookups
+          if (window.app) {
+            window.app.allPrompts = prompts;
+            debugLog("renderPrompts: updated window.app.allPrompts");
           } else {
-            promptList.innerHTML = '<div style="padding:1em;">No prompts found.</div>';
-            console.log("[DIAG] renderPrompts: no prompts found at", new Date().toISOString());
+            window.app = { allPrompts: prompts };
+            debugLog("renderPrompts: created window.app with allPrompts");
           }
+          promptList.innerHTML = '';
+          prompts.forEach(prompt => {
+            debugLog("[DIAG] renderPrompts: rendering prompt", { prompt, viewMode });
+            const block = renderPromptBlock(prompt, categories, tags, { debug: true, viewMode });
+
+            // --- List View Spacing & Field Reduction ---
+            if (viewMode === 'list') {
+              block.style.marginBottom = '24px';
+              block.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)';
+              block.style.borderRadius = '12px';
+              block.style.background = 'rgba(255,255,255,0.01)';
+              // Hide results/comments unless expanded
+              const commentsResultsContainer = document.createElement('div');
+              commentsResultsContainer.className = 'comments-results-container';
+              commentsResultsContainer.style.display = 'none';
+              commentsResultsContainer.setAttribute('role', 'region');
+              commentsResultsContainer.setAttribute('aria-label', 'Comments and Results');
+              block.addEventListener('click', () => {
+                commentsResultsContainer.style.display =
+                  commentsResultsContainer.style.display === 'none' ? '' : 'none';
+              });
+              renderCommentsResults(prompt.id, commentsResultsContainer);
+              block.appendChild(commentsResultsContainer);
+            } else {
+              // Grid view: show comments/results as before
+              const commentsResultsContainer = document.createElement('div');
+              commentsResultsContainer.className = 'comments-results-container';
+              commentsResultsContainer.setAttribute('role', 'region');
+              commentsResultsContainer.setAttribute('aria-label', 'Comments and Results');
+              renderCommentsResults(prompt.id, commentsResultsContainer);
+              block.appendChild(commentsResultsContainer);
+            }
+            promptList.appendChild(block);
+          });
+          } else {
+            // Determine context for empty state
+            let contextMsg = '';
+            const searchInput = document.querySelector('[data-testid="prompt-search-input"]');
+            if (searchInput && searchInput.value) {
+              contextMsg = ` for: <strong>${searchInput.value}</strong>`;
+            } else if (currentParams.category) {
+              contextMsg = ` in category: <strong>${currentParams.category}</strong>`;
+            } else if (currentParams.tag) {
+              contextMsg = ` with tag: <strong>${currentParams.tag}</strong>`;
+            }
+            promptList.innerHTML = `
+              <div style="
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                height: 200px;
+                background: rgba(255,255,255,0.02);
+                border-radius: 12px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+                margin: 2em 0;
+                font-size: 1.2em;
+                color: #6c63ff;
+                flex-direction: column;
+              ">
+                <div>
+                  <span style="font-weight: 600;">No prompts found${contextMsg}.</span>
+                </div>
+                <div style="margin-top: 0.5em; color: #888; font-size: 0.95em;">
+                  Try adjusting your search or filter criteria.
+                </div>
+              </div>
+            `;
+            debugLog("renderPrompts: no prompts found", { contextMsg });
+          }
+          // KISS: Attach event handlers for promptList after DOM is updated
+          setTimeout(() => {
+            try {
+              if (window.initEventHandlers && typeof window.initEventHandlers === 'function') {
+                console.debug('[promptList.js] Attaching event handlers after prompt list render');
+                // Use latest form elements and promptManager if available
+                const formElements = window.getFormElements ? window.getFormElements() : {};
+                const promptManager = window.promptManager || null;
+                window.initEventHandlers(formElements, promptManager, console.debug);
+              }
+            } catch (err) {
+              console.error('[promptList.js] Error attaching event handlers after renderPrompts:', err);
+            }
+          }, 0);
+          debugLog("renderPrompts: END (then block)");
         })
-        .catch(err => {
+        .catch((err) => {
           if (loading) loading.classList.add('hidden');
           promptList.innerHTML = '<div style="padding:1em;color:red;">Error loading prompts.</div>';
-          console.error('[DIAG] PromptList: Failed to load prompts', err, "at", new Date().toISOString());
+          debugLog("renderPrompts: error loading prompts", err);
         });
-    } else {
-      console.warn("[DIAG] renderPrompts: promptList element not found at", new Date().toISOString());
     }
+    debugLog("renderPrompts: END");
   }
 
   // Scroll a specific prompt into view after rendering
   function scrollPromptIntoView(promptId) {
+    debugLog("scrollPromptIntoView: START", { promptId });
     const promptList = document.getElementById('prompt-list');
     if (promptList && promptId) {
       const promptEl = promptList.querySelector(`[data-id="${promptId}"]`);
       if (promptEl) {
         promptEl.scrollIntoView({ behavior: 'auto', block: 'center' });
+        debugLog("scrollPromptIntoView: scrolled to prompt", { promptId });
+      } else {
+        debugLog("scrollPromptIntoView: prompt element not found", { promptId });
       }
+    } else {
+      debugLog("scrollPromptIntoView: promptList or promptId missing", { promptList, promptId });
     }
+    debugLog("scrollPromptIntoView: END");
   }
 
   // Patch renderPrompts to scroll a specific prompt into view after rendering
@@ -320,26 +589,26 @@ export function initPromptList(params = {}) {
 
 // Top-level export for ES module compatibility
 function renderPromptsWithScroll(promptId) {
-  // [DEBUG] renderPromptsWithScroll called
-  console.log("[DEBUG] renderPromptsWithScroll called with promptId:", promptId, "at", new Date().toISOString());
+  debugLog("renderPromptsWithScroll: START", { promptId, time: new Date().toISOString() });
   if (typeof renderPrompts === 'function') {
     renderPrompts();
     setTimeout(() => {
       if (typeof scrollPromptIntoView === 'function') {
-        console.log("[DEBUG] scrollPromptIntoView called with promptId:", promptId, "at", new Date().toISOString());
+        debugLog("renderPromptsWithScroll: calling scrollPromptIntoView", { promptId, time: new Date().toISOString() });
         scrollPromptIntoView(promptId);
       } else {
-        console.warn("[DEBUG] scrollPromptIntoView is not a function");
+        debugLog("renderPromptsWithScroll: scrollPromptIntoView is not a function");
       }
-      // [DEBUG] After render, log all prompt blocks in DOM
+      // After render, log all prompt blocks in DOM
       const promptBlocks = Array.from(document.querySelectorAll('[data-testid="prompt-block"]')).map(el => ({
         id: el.getAttribute('data-id'),
         title: el.querySelector('[data-testid="prompt-title"]')?.textContent
       }));
-      console.log("[DEBUG] Prompt blocks in DOM after render:", promptBlocks, "at", new Date().toISOString());
+      debugLog("renderPromptsWithScroll: Prompt blocks in DOM after render", { promptBlocks, time: new Date().toISOString() });
     }, 400);
   } else {
-    console.warn("[DEBUG] renderPrompts is not a function");
+    debugLog("renderPromptsWithScroll: renderPrompts is not a function");
   }
+  debugLog("renderPromptsWithScroll: END");
 }
 export { renderPromptsWithScroll };

@@ -1,1 +1,24 @@
-[]
+[
+    {
+        "id": "prompt_6819b65d86feb8.66951826",
+        "title": "prompt 1",
+        "content": "content 1",
+        "category": "cat_681979ef541e94.50819563",
+        "tags": [
+            "tag_68197a288d1666.83817734"
+        ],
+        "created_at": "2025-05-06T09:12:29+02:00",
+        "updated_at": "2025-05-06T09:15:02+02:00"
+    },
+    {
+        "id": "prompt_6819b6814210d4.01348203",
+        "title": "prompt 2",
+        "content": "prompt content 2",
+        "category": "cat_68197ab2a6ddb7.30605398",
+        "tags": [
+            "tag_68197a288d1666.83817734"
+        ],
+        "created_at": "2025-05-06T09:13:05+02:00",
+        "updated_at": "2025-05-06T09:14:06+02:00"
+    }
+]

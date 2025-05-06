@@ -4,140 +4,141 @@
   <meta charset="UTF-8">
   <title>Minimal Prompt App</title>
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <style>
-    body { font-family: sans-serif; margin: 2em; }
-    #prompt-list { margin-top: 2em; }
-    .prompt { border: 1px solid #ccc; padding: 1em; margin-bottom: 1em; }
-    .prompt-title { font-weight: bold; }
-    form { margin-top: 2em; }
-    label { display: block; margin-bottom: 0.5em; }
-    input, textarea { width: 100%; margin-bottom: 1em; }
-    button { padding: 0.5em 1em; }
-  </style>
+  <!-- Removed redundant inline styles; all styles are now in main.css -->
   <link rel="stylesheet" href="css/main.css">
 </head>
 <body>
-  <h1>Minimal Prompt App</h1>
-  <input id="search-input" type="text" placeholder="Search prompts..." style="width:100%;max-width:400px;margin-bottom:1em;padding:0.5em;">
-  <div style="display:flex;gap:1em;align-items:center;margin-bottom:1em;">
-    <div id="filter-summary" style="margin-bottom:1em;font-weight:bold;"></div>
-    <label for="filter-category" style="margin:0;">Category:
-      <select id="filter-category" style="margin-right:1em;">
+  <!-- Accessible Navigation Bar -->
+  <nav id="main-nav" role="navigation" aria-label="Main Navigation">
+    <div class="nav-section">
+      <button id="nav-dashboard-btn" type="button" class="nav-btn" aria-label="Go to Dashboard" tabindex="0" data-testid="nav-dashboard-btn">Dashboard</button>
+      <button id="nav-prompts-btn" type="button" class="nav-btn" aria-label="Go to Prompts" tabindex="0" data-testid="nav-prompts-btn">Prompts</button>
+    </div>
+    <div class="nav-section nav-center">
+      <h1 class="m-0" id="app-title">Minimal Prompt App</h1>
+    </div>
+    <div class="nav-section">
+      <input id="search-input" type="text" placeholder="Search prompts..." aria-label="Search prompts" class="w-100 maxw-400 mb-0 p-05em" tabindex="0" data-testid="prompt-search-input">
+    </div>
+  </nav>
+  <!-- Sticky Toolbar for Prompt Controls -->
+  <div id="prompt-toolbar">
+    <div id="filter-summary" class="fw-bold" aria-live="polite"></div>
+    <label for="filter-category" class="m-0">Category:
+      <select id="filter-category" class="mr-1em" aria-label="Filter by Category" tabindex="0" data-testid="filter-category-select">
         <option value="">All</option>
       </select>
     </label>
-    <button id="manage-categories-btn" type="button" class="utility" style="margin-right:1em;">Manage Categories</button>
-    <label for="filter-tag" style="margin:0;">Tag:
-      <select id="filter-tag">
+    <button id="manage-categories-btn" type="button" class="utility mr-1em" aria-label="Manage Categories" tabindex="0" data-testid="manage-categories-btn">Manage Categories</button>
+    <label for="filter-tag" class="m-0">Tag:
+      <select id="filter-tag" aria-label="Filter by Tag" tabindex="0" data-testid="filter-tag-select">
         <option value="">All</option>
       </select>
     </label>
-    <button id="manage-tags-btn" type="button" class="utility">Manage Tags</button>
-    <button id="clear-filters-btn" type="button" class="utility" style="margin-left:1em;">Clear Filters</button>
+    <button id="manage-tags-btn" type="button" class="utility" aria-label="Manage Tags" tabindex="0" data-testid="manage-tags-btn">Manage Tags</button>
+    <button id="clear-filters-btn" type="button" class="utility ml-1em" aria-label="Clear Filters" tabindex="0" data-testid="clear-filters-btn">Clear Filters</button>
+    <div id="prompt-list-actions" class="d-flex jc-center gap-12 mt-16px">
+      <button id="add-prompt-btn" data-testid="add-prompt-btn" type="button" class="success" aria-label="Add Prompt" tabindex="0">＋ <span class="visually-hidden">Add Prompt</span></button>
+      <button id="batch-import-btn" data-testid="batch-import-btn" type="button" aria-label="Batch Import Prompts" tabindex="0">⇆ <span class="visually-hidden">Batch Import</span></button>
+      <button id="load-more-btn" type="button" class="utility d-none" aria-label="Load More Prompts" tabindex="0" data-testid="load-more-btn">Load More</button>
+    </div>
   </div>
-  <div id="prompt-list"></div>
-  <button id="load-more-btn" type="button" class="utility" style="display:none;margin-top:1em;">Load More</button>
-  <!-- Prompt Detail Modal -->
+  <!-- Dashboard container for dashboard.js -->
+  <!-- Prompt List Section for promptList.js and dashboard.js integration -->
+  <main id="main-content" role="main" tabindex="-1">
+    <section id="prompt-list-section" class="d-none">
+      <div id="prompt-list"></div>
+    </section>
+    <div id="dashboard"></div>
+  </main>
+  <!-- Prompt Detail Modal (dynamic, managed by modals.js) -->
   <div
-    id="prompt-modal"
+    id="prompt-detail-modal"
     class="modal"
     role="dialog"
     aria-modal="true"
-    aria-labelledby="modal-title"
-    style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;align-items:center;justify-content:center;z-index:1000;"
+    aria-labelledby="prompt-detail-title"
+    tabindex="-1"
+    hidden
   >
-    <div class="modal-content" style="max-width:400px;width:90vw;position:relative;">
-      <button id="close-modal-btn" class="close-modal secondary" aria-label="Close">&times;</button>
-      <h2 id="modal-title">Prompt Details</h2>
-      <div id="modal-content"></div>
-<div style="display:flex;gap:0.5em;align-items:center;margin-bottom:1em;">
-  <button id="copy-prompt-btn" class="primary">Copy</button>
-  <button id="edit-prompt-btn" class="primary">Edit</button>
-  <button id="delete-prompt-btn" class="danger">Delete</button>
-</div>
-      <form id="edit-prompt-form" style="display:none;margin-top:1em;">
-        <h3 style="margin-top:0;margin-bottom:1em;">Edit Prompt</h3>
-        <input id="edit-prompt-title" type="text" required style="width:100%;margin-bottom:0.5em;" />
-        <label>
-        Category
-        <div style="display:flex;gap:0.5em;align-items:center;">
-          <select id="edit-prompt-category" required style="flex:1;margin-bottom:0.5em;"></select>
-        </div>
-        </label>
-        <label>
-        Tags
-        <div style="display:flex;gap:0.5em;align-items:center;">
-          <select id="edit-prompt-tags" multiple size="2" style="flex:1;margin-bottom:0.5em;"></select>
-        </div>
-        </label>
-        <textarea id="edit-prompt-content" required style="width:100%;height:6em;max-height:12em;overflow:auto;margin-bottom:0.5em;"></textarea>
-        <div id="edit-preview" class="markdown-preview" style="border:1px solid #ccc;padding:0.5em;margin-bottom:0.5em;background:#fafafa;"></div>
-        <div style="display:flex;gap:0.5em;align-items:center;margin-bottom:1em;">
-          <button type="submit" class="primary">Save</button>
-          <button type="button" id="cancel-edit-btn" class="secondary">Cancel</button>
-        </div>
-      </form>
-      <div id="edit-form-error" style="color:red"></div>
-    </div>
+    <div class="modal-content" id="prompt-detail-body"></div>
   </div>
-  <!-- Tag Management Modal -->
+  <!-- CRUD Modal (dynamic, managed by modals.js) -->
   <div
-    id="tag-management-modal"
+    id="crud-modal"
     class="modal"
     role="dialog"
     aria-modal="true"
-    aria-labelledby="tag-management-title"
-    style="display:none;"
+    aria-labelledby="crud-modal-title"
+    tabindex="-1"
+    hidden
   >
-    <div class="modal-content" style="max-width:400px;width:90vw;position:relative;">
-      <button id="close-tag-management-modal" class="close-modal secondary" aria-label="Close">&times;</button>
-      <h2 id="tag-management-title">Manage Tags</h2>
-      <div id="tag-management-content"></div>
-    </div>
+    <div class="modal-content" id="crud-modal-body"></div>
   </div>
-  <!-- Category Management Modal -->
+  <!-- Batch Import Modal (dynamic, managed by modals.js) -->
   <div
-    id="category-management-modal"
+    id="batch-import-modal"
+    class="modal"
+    data-testid="batch-import-modal"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="batch-import-modal-title"
+    tabindex="-1"
+    hidden
+  >
+    <div class="modal-content" id="batch-import-modal-body"></div>
+  </div>
+  <!-- Result View Modal -->
+  <div
+    id="result-modal"
     class="modal"
     role="dialog"
     aria-modal="true"
-    aria-labelledby="category-management-title"
-    style="display:none;"
-  >
-    <div class="modal-content" style="max-width:400px;width:90vw;position:relative;">
-      <button id="close-category-management-modal" class="close-modal secondary" aria-label="Close">&times;</button>
-      <h2 id="category-management-title">Manage Categories</h2>
-      <div id="category-management-content"></div>
+    aria-labelledby="result-modal-title"
+    tabindex="-1"
+    hidden
+   >
+    <div class="modal-content modal-wide">
+      <button id="close-result-modal-btn" class="close-modal secondary" aria-label="Close Result Modal" tabindex="0" data-testid="close-result-modal-btn">&times;</button>
+      <h2 id="result-modal-title">Result</h2>
+      <div id="result-modal-content" class="modal-scroll-content"></div>
     </div>
   </div>
-  <form id="add-prompt-form">
-    <h2>Add Prompt</h2>
-    <label>
-      Title
-      <input type="text" id="prompt-title" required>
-    </label>
-    <label>
-      Category
-      <div style="display:flex;gap:0.5em;align-items:center;">
-        <select id="prompt-category" required style="flex:1;margin-bottom:1em;"></select>
-        <button type="button" id="add-category-btn" class="utility" style="margin-bottom:1em;">+ Add Category</button>
+    <!-- Tag Management Modal -->
+    <div
+      id="tag-management-modal"
+      class="modal d-none"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="tag-management-title"
+      tabindex="-1"
+    >
+      <div class="modal-content modal-narrow">
+        <button id="close-tag-management-modal" class="close-modal secondary" aria-label="Close Tag Management Modal" tabindex="0" data-testid="close-tag-management-modal-btn">&times;</button>
+        <h2 id="tag-management-title">Manage Tags</h2>
+        <div id="tag-management-content"></div>
       </div>
-    </label>
-    <label>
-      Tags
-      <div style="display:flex;gap:0.5em;align-items:center;">
-        <select id="prompt-tags" multiple size="2" style="flex:1;margin-bottom:1em;"></select>
-        <button type="button" id="add-tag-btn" class="utility" style="margin-bottom:1em;">+ Add Tag</button>
+    </div>
+    <!-- Category Management Modal -->
+    <div
+      id="category-management-modal"
+      class="modal d-none"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="category-management-title"
+      tabindex="-1"
+    >
+      <div class="modal-content modal-narrow">
+        <button id="close-category-management-modal" class="close-modal secondary" aria-label="Close Category Management Modal" tabindex="0" data-testid="close-category-management-modal-btn">&times;</button>
+        <h2 id="category-management-title">Manage Categories</h2>
+        <div id="category-management-content"></div>
       </div>
-    </label>
-    <label>
-    Content
-    <textarea id="prompt-content" rows="3" required></textarea>
-    <div id="add-preview" class="markdown-preview" style="border:1px solid #ccc;padding:0.5em;margin-bottom:1em;background:#fafafa;"></div>
-    </label>
-    <button type="submit" class="success">Add Prompt</button>
-    <div id="form-error" style="color:red"></div>
-  </form>
+    </div>
   <script type="module" src="js/main.js"></script>
-</body>
-</html>
+  <!-- Toast notification element for feedback (used by ui/toast.js) -->
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+  </body>
+  </html>
+<!-- DEBUG: Add a high-contrast always-on-top clickable div to test pointer events -->
+<!-- DEBUG BUTTON REMOVED FOR PRODUCTION -->
+<!-- End DEBUG -->

@@ -1,0 +1,109 @@
+// eventHandlers.js
+// [AUDITFIX] Modularize event handler logic from main.js
+
+import { showPromptModal } from './modals.js';
+import { showToast } from './toast.js';
+import { getCategories } from '../state/appState.js';
+import { loadCategoriesAndTags } from '../main.js'; // Will need to ensure no circular dependency
+
+export function initEventHandlers(_formElements, promptManager, debugLog) {
+  console.log('[initEventHandlers] function called');
+  const {
+    promptList,
+    form,
+    titleInput,
+    categoryInput,
+    tagsInput,
+    formError
+  } = _formElements;
+
+  // Debug: Log presence of all key UI elements
+  console.debug('[initEventHandlers] DOM presence:', {
+    promptList: !!promptList,
+    form: !!form,
+    titleInput: !!titleInput,
+    categoryInput: !!categoryInput,
+    tagsInput: !!tagsInput,
+    formError: !!formError
+  });
+
+  // Global click logger for bug reporting
+  if (!window.__globalClickLoggerAttached) {
+    document.addEventListener('click', (e) => {
+      console.debug('[GLOBAL CLICK LOGGER] Click event:', {
+        target: e.target,
+        tag: e.target.tagName,
+        id: e.target.id,
+        class: e.target.className,
+        dataTestid: e.target.getAttribute('data-testid')
+      });
+    }, true);
+    window.__globalClickLoggerAttached = true;
+  }
+
+  // Add Prompt button opens CRUD modal
+  const addPromptBtn = document.querySelector('[data-testid="add-prompt-btn"]');
+  if (addPromptBtn) {
+    console.debug('[initEventHandlers] Found [data-testid="add-prompt-btn"], attaching click handler');
+    addPromptBtn.addEventListener('click', (e) => {
+      debugLog('[UI] Add Prompt button clicked', e);
+      window.dispatchEvent(new CustomEvent('openCrudModal', { detail: { mode: 'add' } }));
+    });
+    console.debug('[initEventHandlers] [data-testid="add-prompt-btn"] click handler attached');
+  } else {
+    console.warn('[initEventHandlers] [data-testid="add-prompt-btn"] not found at handler attach time');
+  }
+
+  // Clicking a prompt block opens prompt detail modal
+  if (promptList) {
+    console.debug('[initEventHandlers] Found promptList, attaching click handler');
+    promptList.addEventListener('click', (e) => {
+      try {
+        console.debug('[initEventHandlers] promptList click event', e);
+        const promptBlock = e.target.closest('[data-testid="prompt-block"]');
+        if (promptBlock) {
+          const promptId = promptBlock.getAttribute('data-id');
+          debugLog('[UI] Prompt block clicked, id:', promptId, e);
+          window.dispatchEvent(new CustomEvent('openPromptDetailModal', { detail: { promptId } }));
+        } else {
+          console.debug('[initEventHandlers] Clicked element is not a prompt block', e.target);
+        }
+      } catch (err) {
+        debugLog('[UI] Error handling prompt block click:', err);
+        showToast('Error opening prompt details.');
+      }
+    });
+    console.debug('[initEventHandlers] promptList click handler attached');
+  } else {
+    console.warn('[initEventHandlers] promptList not found at handler attach time');
+  }
+
+  // Add Category button
+  const addCategoryBtn = document.getElementById('add-category-btn');
+  if (addCategoryBtn) {
+    console.debug('[initEventHandlers] Found #add-category-btn, attaching click handler');
+    debugLog('[AddCategory] Handler attached to #add-category-btn');
+    addCategoryBtn.onclick = async (e) => {
+      debugLog('[AddCategory] Clicked', e);
+      const name = await showPromptModal('Enter new category name:');
+      if (!name) return;
+      try {
+        // This will be refactored to use addCategory from categoryTagApi
+        await loadCategoriesAndTags();
+        if (categoryInput) {
+          categoryInput.value = getCategories().slice(-1)[0]?.id || '';
+          debugLog('[AddCategory] Set categoryInput.value to', categoryInput.value);
+          if (titleInput) titleInput.focus();
+        }
+        debugLog('[AddCategory] Current categories after add:', getCategories());
+      } catch (err) {
+        if (formError) formError.textContent = 'Error adding category. Please check your network connection or try again later.';
+        debugLog('[AddCategory] Error:', err);
+        showToast('Error adding category.');
+      }
+    };
+    console.debug('[initEventHandlers] #add-category-btn click handler attached');
+  } else {
+    console.warn('[initEventHandlers] #add-category-btn not found at handler attach time');
+  }
+}

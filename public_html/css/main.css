@@ -285,12 +285,60 @@ body {
 
 /* Prompt Grid/List */
 #prompt-list {
+  /* Default to grid, but allow .prompt-list/.prompt-grid to override */
   display: grid;
   gap: 1.4rem;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   margin-bottom: 2.2em;
-  max-height: 60vh;
-  overflow-y: auto;
+}
+.prompt-grid {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1.4rem;
+  align-items: stretch;
+  padding-bottom: 1.5em;
+}
+.prompt-list {
+  display: flex !important;
+  flex-direction: column;
+  gap: 1.1rem;
+  align-items: stretch;
+  padding-bottom: 1.5em;
+}
+/* Prompt List/Grid Layouts */
+.prompt-grid {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1.4rem;
+  align-items: stretch;
+  padding-bottom: 1.5em;
+}
+.prompt-list {
+  display: flex !important;
+  flex-direction: column;
+  gap: 1.1rem;
+  align-items: stretch;
+  padding-bottom: 1.5em;
+}
+/* Prompt Block/Card Styles (for .prompt-block and .hoverable) */
+.prompt-block, .hoverable {
+  background: var(--color-card);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 6px 24px var(--color-shadow);
+  padding: 1.33em 1.67em 1.27em 1.6em;
+  cursor: pointer;
+  border: 1.5px solid var(--color-border);
+  transition: box-shadow 0.3s, transform 0.18s cubic-bezier(.53,.14,.38,1.13), border-color 0.18s;
+  animation: fadeInUp 0.57s both;
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 0.5em;
+}
+.prompt-block:hover, .prompt-block:focus, .hoverable:hover, .hoverable:focus {
+  box-shadow: 0 10px 36px 4px var(--color-highlight);
+  transform: translateY(-6px) scale(1.022);
+  border-color: var(--color-primary);
+  z-index: 2;
 }
 .prompt-card {
   background: var(--color-card);
@@ -345,29 +393,52 @@ label {
   margin-top: 0.9em;
   display: flex;
 /* Tag pill style for tag/category buttons - modern purple gradient, fully pill, interactive */
+/* Consolidated and improved tag/category pill styles for accessibility and contrast */
+:root {
+  --tag-pill-gradient: linear-gradient(135deg, #7B3FE4 60%, #4F9CFF 100%);
+  --tag-pill-gradient-hover: linear-gradient(135deg, #5D3DE3 60%, #3F51B5 100%);
+  --tag-pill-color: #fff;
+  --tag-pill-color-hover: #F3EFFF;
+  --tag-pill-shadow: 0 2px 8px rgba(123, 63, 228, 0.10);
+  --tag-pill-shadow-focus: 0 0 8px 2px rgba(123, 63, 228, 0.32);
+
+  --category-pill-gradient: linear-gradient(135deg, #FFD700 60%, #FFB347 100%);
+  --category-pill-gradient-hover: linear-gradient(135deg, #FFE066 60%, #FFD700 100%);
+  --category-pill-color: #3F2A00;
+  --category-pill-shadow: 0 2px 8px rgba(255, 215, 0, 0.10);
+  --category-pill-shadow-focus: 0 0 8px 2px rgba(255, 215, 0, 0.32);
+}
+body.dark {
+  --tag-pill-gradient: linear-gradient(135deg, #9e59ef 60%, #5bbaef 100%);
+  --tag-pill-gradient-hover: linear-gradient(135deg, #7B3FE4 60%, #3F51B5 100%);
+  --tag-pill-color: #fff;
+  --tag-pill-color-hover: #fff;
+  --tag-pill-shadow: 0 2px 8px rgba(123, 63, 228, 0.18);
+  --tag-pill-shadow-focus: 0 0 8px 2px rgba(123, 63, 228, 0.38);
+
+  --category-pill-gradient: linear-gradient(135deg, #FFE066 60%, #FFD700 100%);
+  --category-pill-gradient-hover: linear-gradient(135deg, #FFD700 60%, #FFB347 100%);
+  --category-pill-color: #2B1A4B;
+  --category-pill-shadow: 0 2px 8px rgba(255, 215, 0, 0.18);
+  --category-pill-shadow-focus: 0 0 8px 2px rgba(255, 215, 0, 0.38);
+}
+
 .tag-pill {
   display: inline-block;
-  background: linear-gradient(135deg, #8A2BE2 60%, #00BFFF 100%);
-  color: #fff;
+  background: var(--tag-pill-gradient);
+  color: var(--tag-pill-color);
   border: none;
   border-radius: 9999px;
-  padding: 6px 14px;
+  padding: 0.4em 1.1em;
   margin-right: 0.5em;
-  min-height: 28px;
-  font-size: 15px;
+  min-height: 1.8em;
+  font-size: 1em;
   font-family: var(--font-main);
   font-weight: 500;
   letter-spacing: 0.01em;
   cursor: pointer;
-/* Tag pill fade-in animation */
-@keyframes tagFadeIn {
-  from { opacity: 0; transform: translateY(10px) scale(0.95);}
-  to   { opacity: 1; transform: translateY(0) scale(1);}
-}
-.tag-pill {
   animation: tagFadeIn 0.33s cubic-bezier(.53,.14,.38,1.13);
-}
-  box-shadow: 0 2px 8px rgba(138, 43, 226, 0.10);
+  box-shadow: var(--tag-pill-shadow);
   transition:
     background 0.18s cubic-bezier(.53,.14,.38,1.13),
     color 0.18s cubic-bezier(.53,.14,.38,1.13),
@@ -377,14 +448,54 @@ label {
   vertical-align: middle;
   user-select: none;
 }
-.tag-pill:hover, .tag-pill:focus {
-  background: linear-gradient(135deg, #6C4AB6 60%, #0090C8 100%);
-  color: #F3EFFF;
-  box-shadow: 0 0 8px 2px rgba(138, 43, 226, 0.32);
-  transform: scale(1.06);
-  outline: none;
+@keyframes tagFadeIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.95);}
+  to   { opacity: 1; transform: translateY(0) scale(1);}
 }
-  gap: 1.15em;
+.tag-pill:hover, .tag-pill:focus {
+  background: var(--tag-pill-gradient-hover);
+  color: var(--tag-pill-color-hover);
+  box-shadow: var(--tag-pill-shadow-focus);
+  transform: scale(1.07);
+  outline: 2px solid var(--color-primary);
+}
+.tag-pill.active, .tag-pill[aria-current="true"] {
+  box-shadow: 0 0 12px 2px #7B3FE4, 0 0 0 2px #fff2;
+  background: var(--tag-pill-gradient-hover);
+  color: #fff;
+  text-decoration: underline;
+}
+
+.category-pill {
+  display: inline-block;
+  background: var(--category-pill-gradient);
+  color: var(--category-pill-color);
+  border: 1.5px solid #FFD700;
+  border-radius: 9999px;
+  padding: 0.4em 1.1em;
+  margin-right: 0.5em;
+  min-height: 1.8em;
+  font-size: 1em;
+  font-family: var(--font-main);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  box-shadow: var(--category-pill-shadow);
+  transition:
+    background 0.18s cubic-bezier(.53,.14,.38,1.13),
+    color 0.18s cubic-bezier(.53,.14,.38,1.13),
+    box-shadow 0.18s cubic-bezier(.53,.14,.38,1.13),
+    transform 0.13s cubic-bezier(.53,.14,.38,1.13);
+  outline: none;
+  vertical-align: middle;
+  user-select: none;
+}
+.category-pill:hover, .category-pill:focus {
+  background: var(--category-pill-gradient-hover);
+  color: var(--category-pill-color);
+  box-shadow: var(--category-pill-shadow-focus);
+  transform: scale(1.07);
+  outline: 2px solid #FFD700;
 }
 .prompt-card .prompt-actions button {
   background: var(--color-surface-accent);
@@ -401,12 +512,18 @@ label {
   color: var(--color-primary-contrast);
 }
 
-/* Loading indicator */
-.loading {
-  padding: 1.8em 0;
-  font-size: 1.1em;
-  text-align: center;
-  color: var(--color-text-muted);
+/* Tag/Category Management UI Rows */
+.management-form-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  margin-bottom: 1em;
+}
+.management-item-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  margin-bottom: 0.5em;
 }
 .hidden { display: none !important; }
 
@@ -497,7 +614,7 @@ label {
   top: 0;
   width: 100vw;
   height: 100vh;
-  background: rgba(26, 16, 43, 0.92);
+  background: rgba(16, 8, 24, 0.97);
   visibility: hidden;
   opacity: 0;
   transition: opacity 200ms cubic-bezier(.53,.14,.38,1.13), visibility 200ms cubic-bezier(.53,.14,.38,1.13);
@@ -518,7 +635,8 @@ label {
   width: min(90vw, 400px);
   max-height: 80vh;
   overflow-y: auto;
-  padding: 24px;
+  box-sizing: border-box;
+  padding: 32px 28px 88px 28px; /* extra bottom padding for sticky button */
   box-shadow: 0 0 20px 0 rgba(0,0,0,0.5);
   animation: modalFadeIn 0.22s cubic-bezier(.53,.14,.38,1.13);
   position: relative;
@@ -526,15 +644,20 @@ label {
   flex-direction: column;
   gap: 0;
   transition: box-shadow 0.2s, background 0.2s;
+  overflow-x: hidden;
 }
 @keyframes modalFadeIn {
   from { opacity: 0; transform: translateY(32px) scale(0.97);}
   to   { opacity: 1; transform: translateY(0) scale(1);}
 }
 .close-modal {
-  position: absolute;
-  top: 18px;
-  right: 18px;
+  position: sticky;
+  top: 0;
+  right: 0;
+  float: right;
+  margin-left: auto;
+  margin-right: -10px;
+  margin-top: -10px;
   background: #2B1A4B;
   border: none;
   color: #fff;
@@ -548,7 +671,7 @@ label {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 2;
+  z-index: 10;
   transition: background 0.18s, color 0.18s, box-shadow 0.18s, transform 0.13s;
 }
 .close-modal:hover, .close-modal:focus {
@@ -649,7 +772,7 @@ label {
   color: #fff;
   border: none;
   border-radius: 9999px;
-  padding: 6px 12px;
+  padding: 6px 14px;
   margin-right: 0.5em;
   min-height: 28px;
   font-size: 15px;
@@ -668,10 +791,55 @@ label {
   user-select: none;
   animation: tagFadeIn 0.33s cubic-bezier(.53,.14,.38,1.13);
 }
+.category-pill {
+  display: inline-block;
+  background: linear-gradient(135deg, #FFD700 60%, #FFB347 100%);
+  color: #3F2A00;
+  border: 1.5px solid #FFD700;
+  border-radius: 9999px;
+  padding: 6px 14px;
+  margin-right: 0.5em;
+  min-height: 28px;
+  font-size: 15px;
+  font-family: var(--font-main);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(255, 215, 0, 0.10);
+}
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 18px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--color-border);
+}
+.form-group:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+  transition:
+    background 0.18s cubic-bezier(.53,.14,.38,1.13),
+    color 0.18s cubic-bezier(.53,.14,.38,1.13),
+    box-shadow 0.18s cubic-bezier(.53,.14,.38,1.13),
+    transform 0.13s cubic-bezier(.53,.14,.38,1.13);
+  outline: none;
+  vertical-align: middle;
+  user-select: none;
+  animation: tagFadeIn 0.33s cubic-bezier(.53,.14,.38,1.13);
+}
 .tag-pill:hover, .tag-pill:focus {
   background: linear-gradient(135deg, #5D3DE3 60%, #3F51B5 100%);
   color: #F3EFFF;
   box-shadow: 0 0 8px 2px rgba(128, 90, 213, 0.5);
+  transform: scale(1.07);
+  outline: none;
+}
+.category-pill:hover, .category-pill:focus {
+  background: linear-gradient(135deg, #FFE066 60%, #FFD700 100%);
+  color: #3F2A00;
+  box-shadow: 0 0 8px 2px rgba(255, 215, 0, 0.32);
   transform: scale(1.07);
   outline: none;
 }
@@ -695,7 +863,9 @@ form {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 1.05em;
+  gap: 1.15em;
+  width: 100%;
+  box-sizing: border-box;
 }
 input, select, textarea, button {
   font-family: var(--font-main);
@@ -709,6 +879,9 @@ input[type="text"], input[type="search"], input[type="email"], textarea, select 
   font-size: 1em;
   transition: border-color var(--transition), box-shadow var(--transition);
   outline: none;
+  margin-bottom: 0.85em;
+  width: 100%;
+  box-sizing: border-box;
 }
 input:focus, textarea:focus, select:focus {
   border-color: var(--color-primary);
@@ -727,6 +900,7 @@ button {
   border: none;
   transition: background var(--transition), color var(--transition), box-shadow var(--transition);
   cursor: pointer;
+  box-sizing: border-box;
 }
 button:active {
   transform: scale(0.98);
@@ -762,6 +936,33 @@ button.success,
 .success {
   background: var(--color-success);
   color: var(--color-primary-contrast);
+}
+
+/* Sticky Save/Submit button for modal forms */
+#prompt-crud-form > .sticky-submit,
+#prompt-crud-form > .modal-actions.sticky-submit {
+  position: fixed;
+  left: 50%;
+  bottom: 32px;
+  transform: translateX(-50%);
+  width: calc(min(90vw, 400px) - 56px);
+  z-index: 20;
+  background: linear-gradient(135deg, #1A102B 90%, #2B1A4B 100%);
+  box-shadow: 0 2px 16px 0 rgba(0,0,0,0.18);
+  padding: 16px 0 12px 0;
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  border-radius: 12px;
+  pointer-events: all;
+}
+@media (max-width: 500px) {
+  #prompt-crud-form > .sticky-submit,
+  #prompt-crud-form > .modal-actions.sticky-submit {
+    width: calc(100vw - 36px);
+    left: 18px;
+    transform: none;
+  }
 }
 button.success:hover, button.success:focus,
 .success:hover, .success:focus {
@@ -1045,4 +1246,97 @@ button.utility:hover, button.utility:focus,
   height: 1px; width: 1px; overflow: hidden;
   clip: rect(1px, 1px, 1px, 1px); white-space: nowrap;
   border: 0; padding: 0; margin: -1px;
+}
+body {
+  padding-top: 48px; /* ensure content is not hidden under the banner */
+}
+@media (max-width: 600px) {
+  body {
+    padding-top: 40px;
+  }
+}
+/* === Community.js Inline Style Replacements (2025-05-06) === */
+.status-placeholder {
+  padding: 1em;
+}
+.unstyled-list {
+  padding-left: 0;
+  list-style: none;
+}
+.author-row {
+  margin-bottom: 0.5em;
+}
+.comment-date {
+  color: #888;
+  font-size: 0.9em;
+  margin-left: 0.5em;
+}
+.form-label-block {
+  display: block;
+  font-weight: bold;
+}
+.input-full {
+  width: 100%;
+  padding: 0.5em;
+}
+.textarea-full {
+  width: 100%;
+  padding: 0.5em;
+  resize: vertical;
+}
+.error-message {
+  color: red;
+  min-height: 1.5em;
+}
+.submit-btn {
+  padding: 0.5em 1em;
+  font-weight: bold;
+}
+.inline-success {
+  display: none;
+  color: green;
+  margin-left: 1em;
+}
+.required-asterisk {
+  color: red;
+}
+/* === Utility Classes for Inline Style Replacements (2025-05-06) === */
+.m-0 { margin: 0 !important; }
+.mb-0 { margin-bottom: 0 !important; }
+.mb-1em { margin-bottom: 1em !important; }
+.mt-16px { margin-top: 1rem !important; } /* 16px = 1rem */
+.fw-bold { font-weight: bold !important; }
+.d-flex { display: flex !important; }
+.d-none { display: none !important; }
+.jc-center { justify-content: center !important; }
+.ai-center { align-items: center !important; }
+.gap-1em { gap: 1em !important; }
+.gap-12 { gap: 12px !important; }
+.w-100 { width: 100% !important; }
+.maxw-400 { max-width: 400px !important; }
+.mr-1em { margin-right: 1em !important; }
+.ml-1em { margin-left: 1em !important; }
+.p-05em { padding: 0.5em !important; }
+
+/* Modal width modifiers */
+.modal-wide { max-width: 600px !important; width: 95vw !important; position: relative !important; }
+.modal-narrow { max-width: 400px !important; width: 90vw !important; position: relative !important; }
+
+/* Modal scroll content */
+.modal-scroll-content { max-height: 60vh !important; overflow: auto !important; padding: 12px 0 0 0 !important; }
+
+
+/* Sticky Prompt Toolbar */
+#prompt-toolbar {
+  position: sticky;
+  top: 56px; /* adjust if nav is taller/shorter */
+  z-index: 100;
+  background: #1A102B;
+  padding: 12px 24px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1em;
+  border-bottom: 1px solid #2d1a40;
 }

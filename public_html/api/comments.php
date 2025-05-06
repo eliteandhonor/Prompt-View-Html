@@ -1,4 +1,14 @@
 <?php
+/**
+ * API Endpoints for /api/comments.php
+ *
+ * GET    /api/comments.php?prompt_id=...   - List all comments for a prompt
+ * POST   /api/comments.php                  - Add a comment (JSON: {prompt_id, content, [author]})
+ * PUT    /api/comments.php?id=...           - Update a comment (JSON: {content, [author]})
+ * DELETE /api/comments.php?id=...           - Delete a comment by id
+ *
+ * All endpoints return JSON: { ok: boolean, ... }
+ */
 // Simple REST API for managing comments on prompts
 error_log("[comments.php] --- Request Start ---");
 error_log("[comments.php] Method: " . $_SERVER['REQUEST_METHOD']);
@@ -33,9 +43,15 @@ function read_comments($file) {
 
 // Utility: Write all comments
 function write_comments($file, $data) {
-    $bytes = file_put_contents($file, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-    error_log("[comments.php] write_comments wrote $bytes bytes to $file");
-    return $bytes;
+   $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+   $bytes = @file_put_contents($file, $json);
+   if ($bytes === false) {
+       $error = error_get_last();
+       error_log("[comments.php] ERROR: Failed to write $file: " . ($error ? $error['message'] : 'unknown error'));
+   } else {
+       error_log("[comments.php] write_comments wrote $bytes bytes to $file");
+   }
+   return $bytes;
 }
 
 // Utility: Send JSON response
@@ -123,23 +139,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'PUT') {
 
 // DELETE /api/comments?id=... - delete a comment
 if ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
-    error_log("[comments.php] Handling DELETE (delete comment)");
-    parse_str($_SERVER['QUERY_STRING'] ?? '', $params);
-    $id = $params['id'] ?? null;
-    error_log("[comments.php] DELETE id: " . $id);
-    if (!$id) {
-        error_log("[comments.php] DELETE missing id");
-        send_json(['ok' => false, 'error' => 'Missing id'], 400);
-    }
-    $comments = read_comments($DATA_FILE);
-    $newComments = array_filter($comments, function($c) use ($id) { return $c['id'] !== $id; });
-    if (count($newComments) === count($comments)) {
-        error_log("[comments.php] DELETE comment not found");
-        send_json(['ok' => false, 'error' => 'Comment not found'], 404);
-    }
-    write_comments($DATA_FILE, array_values($newComments));
-    error_log("[comments.php] Deleted comment id: " . $id);
-    send_json(['ok' => true]);
+   error_log("[comments.php] Handling DELETE (delete comment)");
+   parse_str($_SERVER['QUERY_STRING'] ?? '', $params);
+   $id = $params['id'] ?? null;
+   error_log("[comments.php] DELETE id: " . $id);
+   if (!$id) {
+       error_log("[comments.php] DELETE missing id");
+       send_json(['ok' => false, 'error' => 'Missing id'], 400);
+   }
+   $comments = read_comments($DATA_FILE);
+   error_log("[comments.php] Existing comment IDs: " . implode(', ', array_map(function($c){return $c['id'];}, $comments)));
+   $newComments = array_filter($comments, function($c) use ($id) { return $c['id'] !== $id; });
+   error_log("[comments.php] Remaining comment IDs after delete: " . implode(', ', array_map(function($c){return $c['id'];}, $newComments)));
+   if (count($newComments) === count($comments)) {
+       error_log("[comments.php] DELETE comment not found");
+       send_json(['ok' => false, 'error' => 'Comment not found'], 404);
+   }
+   $result = write_comments($DATA_FILE, array_values($newComments));
+   if ($result === false) {
+       error_log("[comments.php] ERROR: Failed to write updated comments after delete");
+       send_json(['ok' => false, 'error' => 'Failed to write comments file'], 500);
+   }
+   error_log("[comments.php] Deleted comment id: " . $id);
+   send_json(['ok' => true]);
 }
 
 // Fallback: method not allowed

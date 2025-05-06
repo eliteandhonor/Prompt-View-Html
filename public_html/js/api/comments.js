@@ -3,6 +3,11 @@
  * (2025 Rebuild, "stupid simple" pattern)
  */
 
+/**
+ * Fetches all comments for a given prompt.
+ * @param {string} promptId - The ID of the prompt to fetch comments for.
+ * @returns {Promise<Object>} The API response containing comments.
+ */
 export async function fetchComments(promptId) {
   try {
     console.log("[fetchComments] called with promptId:", promptId);
@@ -24,10 +29,16 @@ export async function fetchComments(promptId) {
   }
 }
 
+/**
+ * Adds a comment to a prompt.
+ * @param {string} promptId - The ID of the prompt to add a comment to.
+ * @param {Object} data - The comment data (should include 'content' and optionally 'author').
+ * @returns {Promise<Object>} The API response containing the new comment.
+ */
 export async function addComment(promptId, data) {
   try {
     console.log("[addComment] called with promptId:", promptId, "data:", data);
-    const payload = { action: 'add', promptId, ...data };
+    const payload = { action: 'add', prompt_id: promptId, ...data };
     console.log("[addComment] Sending payload:", payload);
     const res = await fetch('/api/comments.php', {
       method: 'POST',
@@ -49,17 +60,28 @@ export async function addComment(promptId, data) {
   }
 }
 
+/**
+ * Deletes a comment by its ID.
+ * @param {string} commentId - The ID of the comment to delete.
+ * @returns {Promise<Object>} The API response after deletion.
+ */
 export async function deleteComment(commentId) {
   try {
     console.log("[deleteComment] called with commentId:", commentId);
-    const payload = { action: 'delete', commentId };
-    console.log("[deleteComment] Sending payload:", payload);
-    const res = await fetch('/api/comments.php', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    console.log("[deleteComment] Response status:", res.status);
+    const url = `/api/comments.php?id=${encodeURIComponent(commentId)}`;
+    console.log("[deleteComment] Sending DELETE to:", url);
+
+    // Extra logging: show stack trace to confirm call origin
+    console.log("[deleteComment] Stack trace:", new Error().stack);
+
+    const res = await fetch(url, { method: 'DELETE' });
+    console.log("[deleteComment] Fetch completed. Response status:", res.status);
+
+    // Log response headers for debugging
+    for (const [key, value] of res.headers.entries()) {
+      console.log(`[deleteComment] Response header: ${key}: ${value}`);
+    }
+
     if (!res.ok) {
       const text = await res.text();
       console.error("[deleteComment] Error response:", text);

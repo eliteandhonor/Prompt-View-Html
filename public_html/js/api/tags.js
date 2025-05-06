@@ -17,7 +17,7 @@ export async function fetchTags() {
     }
     const data = await res.json();
     console.log("[fetchTags] Data received:", data);
-    return data;
+    return data.tags || [];
   } catch (err) {
     console.error("[fetchTags] Exception:", err);
     throw err;

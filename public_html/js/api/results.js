@@ -27,7 +27,7 @@ export async function fetchResults(promptId) {
 export async function addResult(promptId, data) {
   try {
     console.log("[addResult] called with promptId:", promptId, "data:", data);
-    const payload = { action: 'add', promptId, ...data };
+    const payload = { action: 'add', prompt_id: promptId, ...data };
     console.log("[addResult] Sending payload:", payload);
     const res = await fetch('/api/results.php', {
       method: 'POST',
@@ -52,13 +52,9 @@ export async function addResult(promptId, data) {
 export async function deleteResult(resultId) {
   try {
     console.log("[deleteResult] called with resultId:", resultId);
-    const payload = { action: 'delete', resultId };
-    console.log("[deleteResult] Sending payload:", payload);
-    const res = await fetch('/api/results.php', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
+    const url = `/api/results.php?id=${encodeURIComponent(resultId)}`;
+    console.log("[deleteResult] Sending DELETE to:", url);
+    const res = await fetch(url, { method: 'DELETE' });
     console.log("[deleteResult] Response status:", res.status);
     if (!res.ok) {
       const text = await res.text();
