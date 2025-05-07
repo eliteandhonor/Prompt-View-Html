@@ -4,7 +4,7 @@
 import { fetchPrompts, createPrompt, deletePrompt } from '../api/prompts.js';
 import { renderPromptBlock } from './renderPromptBlock.js';
 import { renderCommentsResults } from './commentsResults.js';
-import { showConfirmModal } from './modals.js';
+import { showConfirmModal, showFullPromptModal } from './modals.js';
 
 export function initPromptList(params = {}) {
   // Debug mode flag for logging
@@ -398,6 +398,23 @@ export function initPromptList(params = {}) {
   // Attach listeners on init and whenever section is shown
   attachPromptListControlListeners();
 
+  // --- Refresh Button and Window Focus Handlers (Best Practice) ---
+  if (!window.__refreshHandlersAdded) {
+    const refreshBtn = document.getElementById('refresh-btn');
+    if (refreshBtn) {
+      refreshBtn.onclick = () => {
+        debugLog("[REFRESH] Refresh button clicked, reloading prompts/tags/categories");
+        renderPrompts();
+        window.dispatchEvent(new CustomEvent('showToast', { detail: { message: 'Data refreshed.', type: 'info' } }));
+      };
+    }
+    window.addEventListener('focus', () => {
+      debugLog("[REFRESH] Window/tab focused, auto-refreshing prompts/tags/categories");
+      renderPrompts();
+    });
+    window.__refreshHandlersAdded = true;
+  }
+
   // Listen for section visibility changes and re-attach listeners
   const promptListSection = document.getElementById('prompt-list-section');
   if (promptListSection) {
@@ -444,126 +461,284 @@ export function initPromptList(params = {}) {
     renderPrompts();
   });
 
+  // --- Virtualized Prompt List/Grid Implementation ---
+  /**
+   * Render the prompt list with client-side filtering by tag/category.
+   * Filtering is performed after fetching all prompts, ensuring that prompts referencing
+   * deleted/missing tags/categories are still shown if they match the filter.
+   * The filtered prompts are stored in window.app.filteredPrompts for state access.
+   */
   function renderPrompts() {
-    debugLog("renderPrompts: START", { currentParams });
+    debugLog("renderPrompts: START (virtualized, client-side filtering)", { currentParams });
     const promptList = document.getElementById('prompt-list');
     const loading = document.getElementById('prompt-list-loading');
     if (loading) loading.classList.remove('hidden');
-    if (promptList) {
-      promptList.innerHTML = '';
-      // Log current view mode and parent class for diagnosis
-      const viewMode = promptList.classList.contains('prompt-list') ? 'list' : (promptList.classList.contains('prompt-grid') ? 'grid' : 'unknown');
-      debugLog("[DIAG] renderPrompts: promptList classList", promptList.classList.value, "viewMode", viewMode);
-      // Fetch prompts, categories, and tags in parallel
-      Promise.all([
-        fetchPrompts(currentParams),
-        import('../api/categories.js').then(mod => mod.fetchCategories()),
-        import('../api/tags.js').then(mod => mod.fetchTags())
-      ])
-      .then(([prompts, categories, tags]) => {
-        if (loading) loading.classList.add('hidden');
-        if (Array.isArray(prompts) && prompts.length > 0) {
-          debugLog("renderPrompts: prompts to render", { prompts, categories, tags });
-          // Keep global app state in sync for modal lookups
-          if (window.app) {
-            window.app.allPrompts = prompts;
-            debugLog("renderPrompts: updated window.app.allPrompts");
-          } else {
-            window.app = { allPrompts: prompts };
-            debugLog("renderPrompts: created window.app with allPrompts");
-          }
-          promptList.innerHTML = '';
-          prompts.forEach(prompt => {
-            debugLog("[DIAG] renderPrompts: rendering prompt", { prompt, viewMode });
-            const block = renderPromptBlock(prompt, categories, tags, { debug: true, viewMode });
+    if (!promptList) return;
+    promptList.innerHTML = '';
+    const viewMode = promptList.classList.contains('prompt-list') ? 'list' : (promptList.classList.contains('prompt-grid') ? 'grid' : 'unknown');
+    debugLog("[DIAG] renderPrompts: promptList classList", promptList.classList.value, "viewMode", viewMode);
 
-            // --- List View Spacing & Field Reduction ---
-            if (viewMode === 'list') {
-              block.style.marginBottom = '24px';
-              block.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)';
-              block.style.borderRadius = '12px';
-              block.style.background = 'rgba(255,255,255,0.01)';
-              // Hide results/comments unless expanded
-              const commentsResultsContainer = document.createElement('div');
-              commentsResultsContainer.className = 'comments-results-container';
-              commentsResultsContainer.style.display = 'none';
-              commentsResultsContainer.setAttribute('role', 'region');
-              commentsResultsContainer.setAttribute('aria-label', 'Comments and Results');
-              block.addEventListener('click', () => {
-                commentsResultsContainer.style.display =
-                  commentsResultsContainer.style.display === 'none' ? '' : 'none';
-              });
-              renderCommentsResults(prompt.id, commentsResultsContainer);
-              block.appendChild(commentsResultsContainer);
-            } else {
-              // Grid view: show comments/results as before
-              const commentsResultsContainer = document.createElement('div');
-              commentsResultsContainer.className = 'comments-results-container';
-              commentsResultsContainer.setAttribute('role', 'region');
-              commentsResultsContainer.setAttribute('aria-label', 'Comments and Results');
-              renderCommentsResults(prompt.id, commentsResultsContainer);
-              block.appendChild(commentsResultsContainer);
-            }
-            promptList.appendChild(block);
-          });
-          } else {
-            // Determine context for empty state
-            let contextMsg = '';
-            const searchInput = document.querySelector('[data-testid="prompt-search-input"]');
-            if (searchInput && searchInput.value) {
-              contextMsg = ` for: <strong>${searchInput.value}</strong>`;
-            } else if (currentParams.category) {
-              contextMsg = ` in category: <strong>${currentParams.category}</strong>`;
-            } else if (currentParams.tag) {
-              contextMsg = ` with tag: <strong>${currentParams.tag}</strong>`;
-            }
-            promptList.innerHTML = `
-              <div style="
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                height: 200px;
-                background: rgba(255,255,255,0.02);
-                border-radius: 12px;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-                margin: 2em 0;
-                font-size: 1.2em;
-                color: #6c63ff;
-                flex-direction: column;
-              ">
-                <div>
-                  <span style="font-weight: 600;">No prompts found${contextMsg}.</span>
-                </div>
-                <div style="margin-top: 0.5em; color: #888; font-size: 0.95em;">
-                  Try adjusting your search or filter criteria.
-                </div>
-              </div>
-            `;
-            debugLog("renderPrompts: no prompts found", { contextMsg });
-          }
-          // KISS: Attach event handlers for promptList after DOM is updated
-          setTimeout(() => {
-            try {
-              if (window.initEventHandlers && typeof window.initEventHandlers === 'function') {
-                console.debug('[promptList.js] Attaching event handlers after prompt list render');
-                // Use latest form elements and promptManager if available
-                const formElements = window.getFormElements ? window.getFormElements() : {};
-                const promptManager = window.promptManager || null;
-                window.initEventHandlers(formElements, promptManager, console.debug);
-              }
-            } catch (err) {
-              console.error('[promptList.js] Error attaching event handlers after renderPrompts:', err);
-            }
-          }, 0);
-          debugLog("renderPrompts: END (then block)");
-        })
-        .catch((err) => {
-          if (loading) loading.classList.add('hidden');
-          promptList.innerHTML = '<div style="padding:1em;color:red;">Error loading prompts.</div>';
-          debugLog("renderPrompts: error loading prompts", err);
+    // Fetch all prompts, categories, and tags in parallel (no tag/category filter in API)
+    Promise.all([
+      fetchPrompts({}), // fetch all prompts, filtering is client-side
+      import('../api/categories.js').then(mod => mod.fetchCategories()),
+      import('../api/tags.js').then(mod => mod.fetchTags())
+    ])
+    .then(([allPrompts, categories, tags]) => {
+      debugLog("[AUDIT] prompts array received from backend:", allPrompts);
+      debugLog("[AUDIT] categories array received from backend:", categories);
+      debugLog("[AUDIT] tags array received from backend:", tags);
+
+      // --- Client-side filtering logic ---
+      let filteredPrompts = allPrompts;
+
+      // Filter by userId (myPrompts)
+      if (currentParams.userId && currentParams.userId === 'me' && window.session && window.session.user) {
+        filteredPrompts = filteredPrompts.filter(p => p.author === window.session.user);
+      }
+
+      // Filter by category
+      if (currentParams.category) {
+        filteredPrompts = filteredPrompts.filter(p =>
+          // Show if prompt.category matches the filter, even if the category is missing from the list
+          p.category === currentParams.category
+        );
+      }
+
+      // Filter by tag
+      if (currentParams.tag) {
+        filteredPrompts = filteredPrompts.filter(p =>
+          // Show if prompt.tags contains the tag, even if the tag is missing from the list
+          Array.isArray(p.tags) && p.tags.includes(currentParams.tag)
+        );
+      }
+
+      // Store in state for modal lookups and testability
+      if (window.app) {
+        window.app.allPrompts = allPrompts;
+        window.app.filteredPrompts = filteredPrompts;
+        debugLog("renderPrompts: updated window.app.allPrompts and filteredPrompts");
+      } else {
+        window.app = { allPrompts, filteredPrompts };
+        debugLog("renderPrompts: created window.app with allPrompts and filteredPrompts");
+      }
+
+      // Handle empty state
+      if (!Array.isArray(filteredPrompts) || filteredPrompts.length === 0) {
+        let contextMsg = '';
+        const searchInput = document.querySelector('[data-testid="prompt-search-input"]');
+        if (searchInput && searchInput.value) {
+          contextMsg = ` for: <strong>${searchInput.value}</strong>`;
+        } else if (currentParams.category) {
+          contextMsg = ` in category: <strong>${currentParams.category}</strong>`;
+        } else if (currentParams.tag) {
+          contextMsg = ` with tag: <strong>${currentParams.tag}</strong>`;
+        }
+        promptList.innerHTML = `
+          <div style="
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 200px;
+            background: rgba(255,255,255,0.02);
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            margin: 2em 0;
+            font-size: 1.2em;
+            color: #6c63ff;
+            flex-direction: column;
+          ">
+            <div>
+              <span style="font-weight: 600;">No prompts found${contextMsg}.</span>
+            </div>
+            <div style="margin-top: 0.5em; color: #888; font-size: 0.95em;">
+              Try adjusting your search or filter criteria.
+            </div>
+          </div>
+        `;
+        debugLog("renderPrompts: no prompts found", { contextMsg });
+        if (loading) loading.classList.add('hidden');
+        return;
+      }
+      if (loading) loading.classList.add('hidden');
+
+      // --- Virtualization Parameters ---
+      const ITEM_HEIGHT = viewMode === 'list' ? 140 : 260; // px, estimate for block height
+      const BUFFER = 6; // Number of extra items to render above/below viewport
+      let containerHeight = promptList.clientHeight || 600; // fallback
+      let scrollTop = 0;
+      let total = filteredPrompts.length;
+
+      // Set up scrollable container
+      promptList.style.overflowY = 'auto';
+      promptList.style.position = 'relative';
+      promptList.tabIndex = 0;
+
+      // Set container height for virtualization
+      function updateContainerHeight() {
+        containerHeight = promptList.clientHeight || 600;
+      }
+      window.addEventListener('resize', updateContainerHeight);
+      updateContainerHeight();
+
+      // Spacer elements for virtualization
+      let topSpacer = document.createElement('div');
+      let bottomSpacer = document.createElement('div');
+      topSpacer.style.height = '0px';
+      bottomSpacer.style.height = '0px';
+      promptList.appendChild(topSpacer);
+      promptList.appendChild(bottomSpacer);
+
+      // Store rendered blocks for recycling
+      let renderedBlocks = [];
+
+      // Render visible items
+      function renderVisible() {
+        // Remove old blocks
+        renderedBlocks.forEach(el => {
+          if (el.parentNode === promptList) promptList.removeChild(el);
         });
-    }
-    debugLog("renderPrompts: END");
+        renderedBlocks = [];
+
+        // Calculate visible range
+        const startIdx = Math.max(0, Math.floor(scrollTop / ITEM_HEIGHT) - BUFFER);
+        const endIdx = Math.min(total, Math.ceil((scrollTop + containerHeight) / ITEM_HEIGHT) + BUFFER);
+
+        // Update spacers
+        topSpacer.style.height = `${startIdx * ITEM_HEIGHT}px`;
+        bottomSpacer.style.height = `${(total - endIdx) * ITEM_HEIGHT}px`;
+
+        // Render visible prompt blocks
+        for (let i = startIdx; i < endIdx; i++) {
+          const prompt = filteredPrompts[i];
+          const block = renderPromptBlock(prompt, categories, tags, { debug: false, viewMode });
+          block.style.position = 'absolute';
+          block.style.top = `${i * ITEM_HEIGHT}px`;
+          block.style.left = '0';
+          block.style.right = '0';
+          block.style.width = '100%';
+          block.setAttribute('data-virtual-idx', i);
+
+          // For grid mode, adjust width and left as needed (simple 2-col for now)
+          if (viewMode === 'grid') {
+            const colCount = Math.max(1, Math.floor(promptList.offsetWidth / 340));
+            const col = i % colCount;
+            const row = Math.floor(i / colCount);
+            block.style.top = `${row * ITEM_HEIGHT}px`;
+            block.style.left = `calc(${(col * 100) / colCount}% + ${col * 12}px)`;
+            block.style.width = `calc(${100 / colCount}% - 12px)`;
+          }
+
+          promptList.appendChild(block);
+          renderedBlocks.push(block);
+        }
+      }
+
+      // Set container min-height for virtualization
+      function updateContainerMinHeight() {
+        if (viewMode === 'grid') {
+          const colCount = Math.max(1, Math.floor(promptList.offsetWidth / 340));
+          const rowCount = Math.ceil(total / colCount);
+          promptList.style.minHeight = `${rowCount * ITEM_HEIGHT}px`;
+        } else {
+          promptList.style.minHeight = `${total * ITEM_HEIGHT}px`;
+        }
+      }
+      updateContainerMinHeight();
+
+      // Scroll handler
+      function onScroll() {
+        scrollTop = promptList.scrollTop;
+        renderVisible();
+      }
+      promptList.addEventListener('scroll', onScroll);
+
+      // Initial render
+      renderVisible();
+
+      // Re-render on resize
+      window.addEventListener('resize', () => {
+        updateContainerHeight();
+        updateContainerMinHeight();
+        renderVisible();
+      });
+
+      // --- Event Delegation for Prompt Block Actions ---
+      promptList.addEventListener('click', (e) => {
+        // Find the prompt block
+        let block = e.target.closest('.prompt-block');
+        if (!block) return;
+        const idx = block.getAttribute('data-virtual-idx');
+        const prompt = filteredPrompts[idx];
+        if (!prompt) return;
+
+        // Modal open (block click, not on action buttons)
+        if (
+          e.target === block ||
+          e.target.classList.contains('prompt-content-preview') ||
+          e.target.classList.contains('prompt-title')
+        ) {
+          // Dispatch event to open modal with full content
+          window.dispatchEvent(new CustomEvent('openPromptModal', { detail: { prompt } }));
+          return;
+        }
+
+        // Edit
+        if (e.target.classList.contains('edit-btn')) {
+          window.dispatchEvent(new CustomEvent('prompt:edit', { detail: { prompt } }));
+          return;
+        }
+        // Delete
+        if (e.target.classList.contains('delete-btn')) {
+          window.dispatchEvent(new CustomEvent('prompt:delete', { detail: { promptId: prompt.id, prompt } }));
+          return;
+        }
+        // Copy
+        if (e.target.classList.contains('copy-btn')) {
+          if (navigator.clipboard) {
+            navigator.clipboard.writeText(prompt.content || '').then(() => {
+              if (window.showToast) window.showToast('Prompt copied to clipboard!');
+            });
+          }
+          return;
+        }
+        // Full View (Expand)
+        if (e.target.classList.contains('fullview-btn')) {
+          window.dispatchEvent(new CustomEvent('openFullPromptModal', { detail: { prompt } }));
+          return;
+        }
+      });
+
+      // Tag/category pill click (delegated)
+      promptList.addEventListener('click', (e) => {
+        if (e.target.classList.contains('tag-pill')) {
+          const tag = e.target.textContent;
+          window.dispatchEvent(new CustomEvent('filterPrompts', { detail: { tag } }));
+        }
+        if (e.target.classList.contains('category-pill')) {
+          const category = e.target.textContent;
+          window.dispatchEvent(new CustomEvent('filterPrompts', { detail: { category } }));
+        }
+      });
+
+      // Accessibility: keyboard navigation for prompt blocks
+      promptList.addEventListener('keydown', (e) => {
+        if ((e.key === 'Enter' || e.key === ' ') && e.target.classList.contains('prompt-block')) {
+          const idx = e.target.getAttribute('data-virtual-idx');
+          const prompt = filteredPrompts[idx];
+          if (prompt) {
+            window.dispatchEvent(new CustomEvent('openPromptModal', { detail: { prompt } }));
+          }
+        }
+      });
+
+      debugLog("renderPrompts: END (virtualized, client-side filtering)");
+    })
+    .catch((err) => {
+      if (loading) loading.classList.add('hidden');
+      promptList.innerHTML = '<div style="padding:1em;color:red;">Error loading prompts.</div>';
+      debugLog("renderPrompts: error loading prompts", err);
+    });
   }
 
   // Scroll a specific prompt into view after rendering
@@ -612,3 +787,12 @@ function renderPromptsWithScroll(promptId) {
   debugLog("renderPromptsWithScroll: END");
 }
 export { renderPromptsWithScroll };
+
+// --- Full View Modal Listener ---
+if (!window.__fullPromptModalListenerAdded) {
+  window.addEventListener('openFullPromptModal', (e) => {
+    const prompt = e?.detail?.prompt;
+    if (prompt) showFullPromptModal(prompt);
+  });
+  window.__fullPromptModalListenerAdded = true;
+}

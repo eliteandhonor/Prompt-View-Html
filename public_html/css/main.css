@@ -289,21 +289,41 @@ body {
   display: grid;
   gap: 1.4rem;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  margin-bottom: 2.2em;
+  /* Maximize visible height for scrollable area */
+  height: calc(100vh - var(--navbar-height) - 4.5rem);
+  min-height: 400px;
+  margin-bottom: 0;
+  overflow-y: auto;
+  position: relative;
+}
+.virtualized-list {
+  position: relative;
+  overflow-y: auto;
+  min-height: 400px;
+  /* Ensures virtualization works with absolute children */
+}
+.virtualized-list .prompt-block {
+  position: absolute;
+  left: 0;
+  right: 0;
+  width: 100%;
+  /* Height is managed by JS for virtualization */
+  margin-bottom: 0;
+  /* Remove margin to avoid stacking gaps */
 }
 .prompt-grid {
   display: grid !important;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 1.4rem;
   align-items: stretch;
-  padding-bottom: 1.5em;
+  padding-bottom: 0.5em;
 }
 .prompt-list {
   display: flex !important;
   flex-direction: column;
   gap: 1.1rem;
   align-items: stretch;
-  padding-bottom: 1.5em;
+  padding-bottom: 0.5em;
 }
 /* Prompt List/Grid Layouts */
 .prompt-grid {
@@ -333,6 +353,9 @@ body {
   position: relative;
   overflow: hidden;
   margin-bottom: 0.5em;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 .prompt-block:hover, .prompt-block:focus, .hoverable:hover, .hoverable:focus {
   box-shadow: 0 10px 36px 4px var(--color-highlight);
@@ -369,6 +392,32 @@ h1, h2, h3 {
   overflow: hidden;
   white-space: nowrap;
   letter-spacing: 0.01em;
+}
+
+/* Prompt card content area: consistent, accessible, responsive, no forced scrollbars */
+.prompt-content-preview {
+  overflow: auto;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  white-space: normal;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding-bottom: 0.2em;
+  /* Remove any forced line clamp/truncation for full content display */
+}
+
+/* Unify prompt description styling for wrapping/overflow */
+.prompt-description {
+  overflow: auto;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  white-space: normal;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  margin-bottom: 0.7em;
+  padding-bottom: 0.1em;
 }
 
 label {
@@ -1339,4 +1388,50 @@ body {
   align-items: center;
   gap: 1em;
   border-bottom: 1px solid #2d1a40;
+}
+
+/* Full Prompt Modal Styles */
+.full-prompt-modal {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: fixed;
+  z-index: 1200;
+  left: 0; top: 0; right: 0; bottom: 0;
+  background: rgba(24, 18, 43, 0.85);
+  transition: opacity 0.18s;
+  opacity: 1;
+}
+.full-prompt-modal:not(.active) {
+  opacity: 0;
+  pointer-events: none;
+}
+.full-prompt-modal .modal-content {
+  max-height: 80vh;
+  overflow: auto;
+  width: 96vw;
+  max-width: 600px;
+  background: var(--color-bg, #18122B);
+  border-radius: 12px;
+  box-shadow: 0 4px 32px #0008;
+  padding: 2em 1.5em;
+  position: relative;
+  color: var(--color-text, #fff);
+}
+.full-prompt-modal .close-modal {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  font-size: 2rem;
+  background: none;
+  border: none;
+  color: var(--color-text, #fff);
+  cursor: pointer;
+  z-index: 2;
+}
+@media (max-width: 700px) {
+  .full-prompt-modal .modal-content {
+    max-width: 98vw;
+    padding: 1.2em 0.5em;
+  }
 }

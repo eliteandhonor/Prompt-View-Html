@@ -117,6 +117,11 @@ export async function deletePrompt(id) {
 export async function importPrompts(prompts) {
   try {
     console.log("[importPrompts] START", { prompts });
+    // DEBUG: Log content length and snippet for each prompt
+    prompts.forEach((p, i) => {
+      const content = p.content || '';
+      console.log(`[importPrompts][DEBUG] Prompt #${i} content length: ${content.length}, first 50: "${content.slice(0,50)}", last 50: "${content.slice(-50)}"`);
+    });
     const payload = { action: "import", prompts };
     const res = await fetch('/api/prompts.php', {
       method: 'POST',

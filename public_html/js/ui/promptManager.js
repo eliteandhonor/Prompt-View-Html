@@ -106,13 +106,19 @@ export function initPromptManager({
       );
     }
     if (filterCategoryValue) {
-      filtered = filtered.filter(p => p.category === filterCategoryValue);
+      filtered = filtered.filter(p => {
+        // Always log for diagnosis
+        console.log('[DIAG][CategoryFilter] p.id:', p.id, 'p.category:', p.category, typeof p.category, 'filterCategoryValue:', filterCategoryValue, typeof filterCategoryValue, 'match:', p.category === filterCategoryValue, 'looseMatch:', p.category == filterCategoryValue);
+        return p.category === filterCategoryValue;
+      });
     }
     if (filterTagName) {
       filtered = filtered.filter(p =>
         Array.isArray(p.tags) && Array.isArray(tags) &&
         p.tags.some(tid => {
           const tag = tags.find(t => t.id === tid);
+          // Always log for diagnosis
+          console.log('[DIAG][TagFilter] p.id:', p.id, 'tid:', tid, typeof tid, 'filterTagName:', filterTagName, typeof filterTagName, 'tag.name:', tag && tag.name, typeof (tag && tag.name), 'matchName:', tag && tag.name === filterTagName, 'matchId:', tid === filterTagName, 'looseMatchId:', tid == filterTagName);
           // Match by tag name or fallback to tag ID
           return (tag && tag.name === filterTagName) || tid === filterTagName;
         })

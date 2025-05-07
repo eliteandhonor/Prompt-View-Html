@@ -54,56 +54,43 @@ export function initEventHandlers(_formElements, promptManager, debugLog) {
     console.warn('[initEventHandlers] [data-testid="add-prompt-btn"] not found at handler attach time');
   }
 
-  // Clicking a prompt block opens prompt detail modal
-  if (promptList) {
-    console.debug('[initEventHandlers] Found promptList, attaching click handler');
-    promptList.addEventListener('click', (e) => {
+  // Event delegation: listen on document for prompt block clicks
+  document.addEventListener('click', (e) => {
+    const promptBlock = e.target.closest('[data-testid="prompt-block"]');
+    if (promptBlock) {
       try {
-        console.debug('[initEventHandlers] promptList click event', e);
-        const promptBlock = e.target.closest('[data-testid="prompt-block"]');
-        if (promptBlock) {
-          const promptId = promptBlock.getAttribute('data-id');
-          debugLog('[UI] Prompt block clicked, id:', promptId, e);
-          window.dispatchEvent(new CustomEvent('openPromptDetailModal', { detail: { promptId } }));
-        } else {
-          console.debug('[initEventHandlers] Clicked element is not a prompt block', e.target);
-        }
+        const promptId = promptBlock.getAttribute('data-id');
+        debugLog && debugLog('[UI] Prompt block clicked (delegated), id:', promptId, e);
+        window.dispatchEvent(new CustomEvent('openPromptDetailModal', { detail: { promptId } }));
       } catch (err) {
-        debugLog('[UI] Error handling prompt block click:', err);
+        debugLog && debugLog('[UI] Error handling prompt block click (delegated):', err);
         showToast('Error opening prompt details.');
       }
-    });
-    console.debug('[initEventHandlers] promptList click handler attached');
-  } else {
-    console.warn('[initEventHandlers] promptList not found at handler attach time');
-  }
+    }
+  });
+  console.debug('[initEventHandlers] Using event delegation for prompt block clicks');
 
-  // Add Category button
-  const addCategoryBtn = document.getElementById('add-category-btn');
-  if (addCategoryBtn) {
-    console.debug('[initEventHandlers] Found #add-category-btn, attaching click handler');
-    debugLog('[AddCategory] Handler attached to #add-category-btn');
-    addCategoryBtn.onclick = async (e) => {
-      debugLog('[AddCategory] Clicked', e);
+  // Event delegation for Add Category button
+  document.addEventListener('click', async (e) => {
+    const addCategoryBtn = e.target.closest('#add-category-btn');
+    if (addCategoryBtn) {
+      debugLog && debugLog('[AddCategory] (delegated) Clicked', e);
       const name = await showPromptModal('Enter new category name:');
       if (!name) return;
       try {
-        // This will be refactored to use addCategory from categoryTagApi
         await loadCategoriesAndTags();
         if (categoryInput) {
           categoryInput.value = getCategories().slice(-1)[0]?.id || '';
-          debugLog('[AddCategory] Set categoryInput.value to', categoryInput.value);
+          debugLog && debugLog('[AddCategory] Set categoryInput.value to', categoryInput.value);
           if (titleInput) titleInput.focus();
         }
-        debugLog('[AddCategory] Current categories after add:', getCategories());
+        debugLog && debugLog('[AddCategory] Current categories after add:', getCategories());
       } catch (err) {
         if (formError) formError.textContent = 'Error adding category. Please check your network connection or try again later.';
-        debugLog('[AddCategory] Error:', err);
+        debugLog && debugLog('[AddCategory] Error:', err);
         showToast('Error adding category.');
       }
-    };
-    console.debug('[initEventHandlers] #add-category-btn click handler attached');
-  } else {
-    console.warn('[initEventHandlers] #add-category-btn not found at handler attach time');
-  }
+    }
+  });
+  console.debug('[initEventHandlers] Using event delegation for #add-category-btn');
 }

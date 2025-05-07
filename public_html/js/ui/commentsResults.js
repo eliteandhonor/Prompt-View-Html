@@ -70,6 +70,10 @@ function trapFocus(modal) {
 
 export async function renderCommentsResults(promptId, container) {
   debugLog("[DEBUG] renderCommentsResults called with promptId:", promptId, "container:", container);
+
+  // Extra diagnostic: log current stack and time
+  debugLog("[DIAG] renderCommentsResults stack:", new Error().stack, "at", new Date().toISOString());
+
   if (!container) {
     debugLog("[DEBUG] renderCommentsResults: container is null/undefined");
     return;
@@ -81,13 +85,16 @@ export async function renderCommentsResults(promptId, container) {
   `;
 
   try {
-    debugLog("[DEBUG] Fetching comments and results for promptId:", promptId);
+    debugLog("[DEBUG] Fetching comments and results for promptId:", promptId, "at", new Date().toISOString());
     const [{ comments = [] }, { results = [] }] = await Promise.all([
       fetchComments(promptId),
       fetchResults(promptId)
     ]);
-    debugLog("[DEBUG] Comments fetched:", comments);
-    debugLog("[DEBUG] Results fetched:", results);
+    debugLog("[DEBUG] Comments fetched:", comments, "promptId:", promptId, "at", new Date().toISOString());
+    debugLog("[DEBUG] Results fetched:", results, "promptId:", promptId, "at", new Date().toISOString());
+
+    // Extra: log all comment/result IDs for cross-pollution detection
+    debugLog("[DIAG] All comment IDs:", comments.map(c => c.id), "All result IDs:", results.map(r => r.id), "promptId:", promptId);
 
     // Render comments
     const commentsHtml = `
@@ -150,8 +157,8 @@ export async function renderCommentsResults(promptId, container) {
     `;
 
     container.innerHTML = commentsHtml + resultsHtml;
-    debugLog("[DEBUG] Comments and results rendered in DOM. Comments count:", comments.length, "Results count:", results.length);
-
+    debugLog("[DEBUG] Comments and results rendered in DOM. Comments count:", comments.length, "Results count:", results.length, "promptId:", promptId, "at", new Date().toISOString());
+    debugLog("[DIAG] renderCommentsResults END for promptId:", promptId, "comments:", comments, "results:", results, "container:", container);
     // Add comment
     const addCommentForm = container.querySelector('#add-comment-form');
     if (addCommentForm) {

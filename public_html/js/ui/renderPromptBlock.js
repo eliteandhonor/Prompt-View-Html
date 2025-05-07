@@ -40,6 +40,7 @@ export function renderPromptBlock(prompt, categories = [], tags = [], options = 
   // Map category ID to name
   let categoryName = '';
   let categoryId = '';
+  let categoryDeleted = false;
   if (prompt.category && Array.isArray(categories)) {
     debugLog('CATEGORY SEARCH', { promptCategory: prompt.category, categories });
     const cat = categories.find(c => c.id === prompt.category);
@@ -49,12 +50,20 @@ export function renderPromptBlock(prompt, categories = [], tags = [], options = 
       debugLog('CATEGORY FOUND', { categoryName, categoryId });
     } else {
       debugLog('CATEGORY NOT FOUND', { promptCategory: prompt.category });
+      categoryDeleted = true;
     }
   }
-  if (!categoryName) categoryName = 'No category';
+  if (!categoryName) {
+    if (categoryDeleted) {
+      categoryName = 'Deleted Category';
+    } else {
+      categoryName = 'No category';
+    }
+  }
 
   // Map tag IDs to names
   let tagObjs = [];
+  let missingTagIds = [];
   if (Array.isArray(prompt.tags) && Array.isArray(tags)) {
     debugLog('TAGS SEARCH', { promptTags: prompt.tags, tags });
     tagObjs = prompt.tags.map(tid => {
@@ -64,7 +73,9 @@ export function renderPromptBlock(prompt, categories = [], tags = [], options = 
         return tag;
       } else {
         debugLog('TAG NOT FOUND', { tid });
-        return { id: tid, name: tid };
+        missingTagIds.push(tid);
+        // Mark as deleted tag
+        return { id: tid, name: 'Deleted Tag', _deleted: true };
       }
     });
   }
@@ -150,107 +161,9 @@ export function renderPromptBlock(prompt, categories = [], tags = [], options = 
   deleteBtn.setAttribute('tabindex', '0');
   deleteBtn.innerText = '🗑️';
   // DELETE: Real handler with debug log and confirmation
-  deleteBtn.onclick = (e) => {
-    e.stopPropagation();
-    debugLog('[ACTION] Delete button clicked', { promptId: prompt.id, prompt });
+  // No direct event handlers attached for virtualization/event delegation compatibility
 
-    // Save current actions for restoration
-    const originalActions = actions.cloneNode(true);
-
-    // Create inline confirmation block
-    const confirmDiv = document.createElement('div');
-    confirmDiv.className = 'prompt-inline-confirm';
-    confirmDiv.style.display = 'flex';
-    confirmDiv.style.gap = '0.5em';
-    confirmDiv.style.alignItems = 'center';
-
-    const confirmText = document.createElement('span');
-    confirmText.textContent = 'Are you sure you want to delete this prompt?';
-
-    const confirmBtn = document.createElement('button');
-    confirmBtn.type = 'button';
-    confirmBtn.className = 'confirm-delete-btn';
-    confirmBtn.style.background = '#c00';
-    confirmBtn.style.color = '#fff';
-    confirmBtn.style.border = 'none';
-    confirmBtn.style.padding = '0.3em 0.8em';
-    confirmBtn.style.borderRadius = '4px';
-    confirmBtn.style.cursor = 'pointer';
-    confirmBtn.textContent = 'Delete';
-
-    const cancelBtn = document.createElement('button');
-    cancelBtn.type = 'button';
-    cancelBtn.className = 'cancel-delete-btn';
-    cancelBtn.style.background = '#eee';
-    cancelBtn.style.color = '#333';
-    cancelBtn.style.border = 'none';
-    cancelBtn.style.padding = '0.3em 0.8em';
-    cancelBtn.style.borderRadius = '4px';
-    cancelBtn.style.cursor = 'pointer';
-    cancelBtn.textContent = 'Cancel';
-
-    // Remove all children from actions and add confirmation UI
-    while (actions.firstChild) actions.removeChild(actions.firstChild);
-    actions.append(confirmText, confirmBtn, cancelBtn);
-
-    // Focus the confirm button for accessibility
-    setTimeout(() => confirmBtn.focus(), 0);
-
-    // Confirm delete handler
-    confirmBtn.onclick = async (ev) => {
-      ev.stopPropagation();
-      debugLog('[ACTION] Inline delete confirmed', { promptId: prompt.id });
-
-      // LOG: Check if window.deletePrompt exists
-      debugLog('[DEBUG] typeof window.deletePrompt:', typeof window.deletePrompt);
-
-      if (window.deletePrompt) {
-        try {
-          debugLog('[DEBUG] Calling window.deletePrompt with id:', prompt.id);
-          const result = await window.deletePrompt(prompt.id);
-          debugLog('[DEBUG] window.deletePrompt result:', result);
-
-          // Remove card from UI immediately
-          const card = e.target.closest('.prompt-block');
-          debugLog('[DEBUG] About to remove card from DOM:', card);
-          if (card && card.parentNode) {
-            card.parentNode.removeChild(card);
-            debugLog('[DEBUG] Card removed from DOM');
-          } else {
-            debugLog('[DEBUG] Card not found or has no parent');
-          }
-          window.dispatchEvent(new CustomEvent('showToast', { detail: { message: 'Prompt deleted.', type: 'success' } }));
-          window.dispatchEvent(new CustomEvent('filterPrompts', { detail: {} }));
-        } catch (err) {
-          debugLog('[ACTION] Backend deletePrompt failed', { promptId: prompt.id, error: err });
-          if (window.showToast) window.showToast('Error deleting prompt.', { type: 'error' });
-          // Restore original actions on error
-          while (actions.firstChild) actions.removeChild(actions.firstChild);
-          Array.from(originalActions.childNodes).forEach(node => actions.appendChild(node));
-        }
-      } else {
-        debugLog('[ACTION] No backend deletePrompt function found', { promptId: prompt.id });
-        if (window.showToast) window.showToast('Delete API not available.', { type: 'error' });
-        // Restore original actions on error
-        while (actions.firstChild) actions.removeChild(actions.firstChild);
-        Array.from(originalActions.childNodes).forEach(node => actions.appendChild(node));
-      }
-    };
-
-    // Cancel handler
-    cancelBtn.onclick = (ev) => {
-      ev.stopPropagation();
-      debugLog('[ACTION] Inline delete cancelled', { promptId: prompt.id });
-      // Restore original actions
-      while (actions.firstChild) actions.removeChild(actions.firstChild);
-      Array.from(originalActions.childNodes).forEach(node => actions.appendChild(node));
-      // Focus the delete button for accessibility
-      const restoredDeleteBtn = actions.querySelector('.delete-btn');
-      if (restoredDeleteBtn) setTimeout(() => restoredDeleteBtn.focus(), 0);
-    };
-  };
-
-  // COPY: Real handler with debug log and feedback
+  // COPY: No direct event handler for virtualization/event delegation compatibility
   const copyBtn = document.createElement('button');
   copyBtn.type = 'button';
   copyBtn.className = 'copy-btn';
@@ -258,35 +171,17 @@ export function renderPromptBlock(prompt, categories = [], tags = [], options = 
   copyBtn.setAttribute('aria-label', `Copy prompt: ${title}`);
   copyBtn.setAttribute('tabindex', '0');
   copyBtn.innerText = '📋';
-  copyBtn.onclick = (e) => {
-    e.stopPropagation();
-    const textToCopy = prompt.content || '';
-    debugLog('[ACTION] Copy button clicked', { promptId: prompt.id, textToCopy });
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(textToCopy)
-        .then(() => {
-          debugLog('[ACTION] Copy to clipboard success', { promptId: prompt.id });
-          if (window.showToast) window.showToast('Prompt copied to clipboard!');
-        })
-        .catch((err) => {
-          debugLog('[ACTION] Copy to clipboard failed', { promptId: prompt.id, error: err });
-          alert('Failed to copy prompt content.');
-        });
-    } else {
-      debugLog('[ACTION] Clipboard API not available', { promptId: prompt.id });
-      alert('Clipboard API not available.');
-    }
-  };
 
-  // EDIT: Real handler with debug log and event
-  editBtn.onclick = (e) => {
-    e.stopPropagation();
-    debugLog('[ACTION] Edit button clicked', { promptId: prompt.id, prompt });
-    // Dispatch a custom event for editing
-    window.dispatchEvent(new CustomEvent('prompt:edit', { detail: { prompt } }));
-  };
+  // Full View button (no direct event handler for virtualization/event delegation compatibility)
+  const fullViewBtn = document.createElement('button');
+  fullViewBtn.type = 'button';
+  fullViewBtn.className = 'fullview-btn';
+  fullViewBtn.setAttribute('data-testid', `fullview-prompt-btn-${escapeHtml(prompt.id)}`);
+  fullViewBtn.setAttribute('aria-label', `Expand full view for prompt: ${title}`);
+  fullViewBtn.setAttribute('tabindex', '0');
+  fullViewBtn.innerText = '⛶';
 
-  actions.append(editBtn, deleteBtn, copyBtn);
+  actions.append(editBtn, deleteBtn, copyBtn, fullViewBtn);
   header.append(h3, actions);
 
   // Content preview
@@ -294,11 +189,7 @@ export function renderPromptBlock(prompt, categories = [], tags = [], options = 
   contentDiv.className = 'prompt-content-preview';
   contentDiv.setAttribute('data-testid', 'prompt-content-preview');
   contentDiv.style.marginBottom = '0.5em';
-  contentDiv.style.overflow = 'hidden';
-  contentDiv.style.display = '-webkit-box';
-  contentDiv.style.webkitLineClamp = '2';
-  contentDiv.style.webkitBoxOrient = 'vertical';
-  contentDiv.style.textOverflow = 'ellipsis';
+  // Removed all line clamp, overflow, and display styles for accessibility and wrapping
   contentDiv.innerHTML = contentPreview;
 
   // Description
@@ -306,11 +197,7 @@ export function renderPromptBlock(prompt, categories = [], tags = [], options = 
   descP.className = 'prompt-description';
   descP.setAttribute('data-testid', 'prompt-description');
   descP.style.marginBottom = '0.7em';
-  descP.style.overflow = 'hidden';
-  descP.style.display = '-webkit-box';
-  descP.style.webkitLineClamp = '2';
-  descP.style.webkitBoxOrient = 'vertical';
-  descP.style.textOverflow = 'ellipsis';
+  // Removed all line clamp, overflow, and display styles for accessibility and wrapping
   descP.innerHTML = description;
 
   // Meta info
@@ -341,8 +228,30 @@ export function renderPromptBlock(prompt, categories = [], tags = [], options = 
   catPill.className = 'tag-pill category-pill';
   catPill.setAttribute('data-testid', `category-pill-${escapeHtml(prompt.id)}`);
   catPill.setAttribute('aria-label', `Category: ${escapeHtml(categoryName)}`);
-  catPill.setAttribute('title', `Category: ${escapeHtml(categoryName)}`);
+  if (categoryName === 'Deleted Category') {
+    catPill.setAttribute('title', 'This prompt references a category that no longer exists. The category was deleted.');
+    catPill.style.background = '#f8d7da';
+    catPill.style.color = '#721c24';
+    catPill.style.border = '1px solid #f5c6cb';
+    catPill.style.position = 'relative';
+    // Add info icon
+    const infoIcon = document.createElement('span');
+    infoIcon.textContent = ' ℹ️';
+    infoIcon.style.cursor = 'pointer';
+    infoIcon.title = 'This category was deleted. The prompt is still shown for reference.';
+    catPill.appendChild(infoIcon);
+  } else {
+    catPill.setAttribute('title', `Category: ${escapeHtml(categoryName)}`);
+  }
   catPill.textContent = categoryName;
+  if (categoryName === 'Deleted Category') {
+    // Add info icon after text
+    const infoIcon = document.createElement('span');
+    infoIcon.textContent = ' ℹ️';
+    infoIcon.style.cursor = 'pointer';
+    infoIcon.title = 'This category was deleted. The prompt is still shown for reference.';
+    catPill.appendChild(infoIcon);
+  }
   tagsDiv.appendChild(catPill);
 
   // Tag pills
@@ -355,25 +264,43 @@ export function renderPromptBlock(prompt, categories = [], tags = [], options = 
     tagsDiv.appendChild(noTags);
   } else {
     tagObjs.forEach(tag => {
-      // Support comma-separated tags as fallback
-      let tagNames = typeof tag.name === 'string' ? tag.name.split(',').map(t => t.trim()).filter(Boolean) : [tag.name];
-      tagNames.forEach(name => {
+      // If this is a deleted tag, show special styling and tooltip
+      if (tag._deleted) {
         const tagPill = document.createElement('span');
         tagPill.className = 'tag-pill';
-        tagPill.setAttribute('data-testid', `tag-pill-${escapeHtml(prompt.id)}-${escapeHtml(tag.id)}-${escapeHtml(name)}`);
-        tagPill.setAttribute('aria-label', `Tag: ${escapeHtml(name)}`);
-        tagPill.setAttribute('title', `Tag: ${escapeHtml(name)}`);
-        tagPill.textContent = name;
-        tagPill.style.cursor = 'pointer';
-        tagPill.onclick = (e) => {
-          e.stopPropagation();
-          debugLog('[DIAG] Tag clicked', { tagName: name, promptId: prompt.id });
-          window.dispatchEvent(new CustomEvent('filterPrompts', { detail: { tag: name } }));
-        };
+        tagPill.setAttribute('data-testid', `tag-pill-${escapeHtml(prompt.id)}-${escapeHtml(tag.id)}-deleted`);
+        tagPill.setAttribute('aria-label', 'Deleted Tag');
+        tagPill.setAttribute('title', 'This prompt references a tag that no longer exists. The tag was deleted.');
+        tagPill.textContent = 'Deleted Tag';
+        tagPill.style.background = '#f8d7da';
+        tagPill.style.color = '#721c24';
+        tagPill.style.border = '1px solid #f5c6cb';
+        tagPill.style.position = 'relative';
+        // Add info icon
+        const infoIcon = document.createElement('span');
+        infoIcon.textContent = ' ℹ️';
+        infoIcon.style.cursor = 'pointer';
+        infoIcon.title = 'This tag was deleted. The prompt is still shown for reference.';
+        tagPill.appendChild(infoIcon);
         tagsDiv.appendChild(tagPill);
-        // DEBUG: Log tag name before display
-        debugLog('TAG DISPLAY', { tagName: name });
-      });
+        debugLog('TAG DISPLAY (deleted)', { tagName: 'Deleted Tag' });
+      } else {
+        // Support comma-separated tags as fallback
+        let tagNames = typeof tag.name === 'string' ? tag.name.split(',').map(t => t.trim()).filter(Boolean) : [tag.name];
+        tagNames.forEach(name => {
+          const tagPill = document.createElement('span');
+          tagPill.className = 'tag-pill';
+          tagPill.setAttribute('data-testid', `tag-pill-${escapeHtml(prompt.id)}-${escapeHtml(tag.id)}-${escapeHtml(name)}`);
+          tagPill.setAttribute('aria-label', `Tag: ${escapeHtml(name)}`);
+          tagPill.setAttribute('title', `Tag: ${escapeHtml(name)}`);
+          tagPill.textContent = name;
+          tagPill.style.cursor = 'pointer';
+          // No direct event handler for tag pill (handled via event delegation)
+          tagsDiv.appendChild(tagPill);
+          // DEBUG: Log tag name before display
+          debugLog('TAG DISPLAY', { tagName: name });
+        });
+      }
     });
   }
 
@@ -414,19 +341,7 @@ export function renderPromptBlock(prompt, categories = [], tags = [], options = 
       delResultBtn.setAttribute('aria-label', `Delete result ${idx + 1}`);
       delResultBtn.setAttribute('tabindex', '0');
       delResultBtn.innerText = '🗑️';
-      delResultBtn.onclick = (e) => {
-        e.stopPropagation();
-        debugLog('[ACTION] Delete result button clicked', { promptId: prompt.id, resultIdx: idx, result });
-        // Dispatch a custom event for result deletion (KISS, pure safety)
-        window.dispatchEvent(new CustomEvent('result:delete', {
-          detail: {
-            promptId: prompt.id,
-            resultId: result.id || idx,
-            result,
-            prompt
-          }
-        }));
-      };
+      // No direct event handler for result delete (handled via event delegation)
 
       resultRow.append(resultContent, delResultBtn);
       resultsSection.appendChild(resultRow);
@@ -447,21 +362,7 @@ export function renderPromptBlock(prompt, categories = [], tags = [], options = 
   });
 
   // Accessibility: keyboard focus/activation
-  block.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      debugLog('Prompt block activated by keyboard', { prompt });
-      block.click();
-    }
-  });
-
-  // Click handler: triggers the intended action (e.g., open prompt detail modal)
-  block.addEventListener('click', (e) => {
-    debugLog('Prompt block activated by click', { prompt });
-    // Intended action: open prompt detail modal or similar
-    // Replace the following line with the actual modal opening logic if needed
-    const event = new CustomEvent('promptBlock:activate', { detail: { prompt } });
-    block.dispatchEvent(event);
-  });
+  // No direct event handlers for block activation (handled via event delegation)
 
   // DEBUG: Log final block structure for inspection
   debugLog('END', { block, html: block.outerHTML });

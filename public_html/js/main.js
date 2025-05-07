@@ -228,7 +228,9 @@ async function loadCategoriesAndTags() {
     debugLog('[loadCategoriesAndTags] Parsed categories:', newCategories);
     debugLog('[loadCategoriesAndTags] Parsed tags:', newTags);
     setCategories(newCategories);
+    console.log('[DIAG][main.js] setCategories called with:', newCategories);
     setTags(newTags);
+    console.log('[DIAG][main.js] setTags called with:', newTags);
 
     populateCategories();
     populateTags();
@@ -386,6 +388,11 @@ function populateTags() {
   }
 }
 export { loadCategoriesAndTags };
+
+// [DIAG] Confirm state after category edit
+window.addEventListener('categoriesUpdated', () => {
+  console.log('[DIAG][main.js] categoriesUpdated event received. Current categories:', getCategories());
+});
 // Global prompt delete function for inline delete UI
 window.deletePrompt = async function(promptId) {
   if (!promptId) throw new Error('No promptId provided to deletePrompt');

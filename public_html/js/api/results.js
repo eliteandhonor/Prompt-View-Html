@@ -6,7 +6,8 @@
 export async function fetchResults(promptId) {
   try {
     console.log("[fetchResults] called with promptId:", promptId);
-    const url = '/api/results.php?promptId=' + encodeURIComponent(promptId);
+    // FIX: Use prompt_id to match backend API
+    const url = '/api/results.php?prompt_id=' + encodeURIComponent(promptId);
     console.log("[fetchResults] Fetching URL:", url);
     const res = await fetch(url);
     console.log("[fetchResults] Response status:", res.status);

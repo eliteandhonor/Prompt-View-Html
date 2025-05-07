@@ -127,12 +127,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         send_json(['ok' => true]);
     }
 
-    // Support POST {action: "update", id: ..., title: ..., content: ...}
+    // Support POST {action: "update", id: ..., title: ..., content: ..., category: ..., tags: [...]}
     if (is_array($input) && isset($input['action']) && $input['action'] === 'update') {
         $id = $input['id'] ?? null;
         $title = $input['title'] ?? null;
         $content = $input['content'] ?? null;
-        error_log("[prompts.php] POST update id: " . $id);
+        $category = $input['category'] ?? null;
+        $tags = $input['tags'] ?? null;
+        error_log("[prompts.php] POST update id: " . $id . ", category: " . json_encode($category) . ", tags: " . json_encode($tags));
         if (!$id || !$title || !$content) {
             error_log("[prompts.php] POST update missing required fields");
             send_json(['ok' => false, 'error' => 'Missing required fields'], 400);
@@ -143,6 +145,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($p['id'] === $id) {
                 $p['title'] = trim($title);
                 $p['content'] = trim($content);
+                // Update category if provided and valid
+                if ($category !== null && is_string($category) && trim($category) !== '') {
+                    $p['category'] = trim($category);
+                    error_log("[prompts.php] POST update set category: " . $p['category']);
+                }
+                // Update tags if provided and valid
+                if ($tags !== null && is_array($tags)) {
+                    $p['tags'] = $tags;
+                    error_log("[prompts.php] POST update set tags: " . json_encode($p['tags']));
+                }
                 $p['updated_at'] = date('c');
                 $found = true;
                 error_log("[prompts.php] POST updated prompt id: " . $p['id']);
@@ -159,6 +171,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // Support POST {action: "import", prompts: [...]}
     if (is_array($input) && isset($input['action']) && $input['action'] === 'import') {
+        // DEBUG: Log content length and snippet for each prompt received
+        if (isset($input['prompts']) && is_array($input['prompts'])) {
+            foreach ($input['prompts'] as $i => $p) {
+                $content = isset($p['content']) ? $p['content'] : '';
+                error_log("[prompts.php][DEBUG] Import prompt #$i content length: " . strlen($content) . ", first 50: \"" . substr($content,0,50) . "\", last 50: \"" . substr($content,-50) . "\"");
+            }
+        }
         $imported = [];
         $skipped = [];
         $errors = [];
@@ -185,6 +204,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         foreach ($promptsArr as $idx => $p) {
+            error_log("[prompts.php] Validating prompt index $idx, description raw value: '" . (isset($p['description']) ? $p['description'] : '[not set]') . "'");
             $err = [];
             if (!is_array($p)) {
                 $err[] = "Not an object";

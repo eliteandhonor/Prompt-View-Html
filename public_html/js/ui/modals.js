@@ -1,3 +1,6 @@
+console.log("[DEBUG] NEW MODALS.JS LOADED - 2025 VERSION");
+// DEBUG: Force modal debug logging ON for diagnosis
+if (typeof window !== "undefined") window.DEBUG_MODALS = true;
 /**
  * ui/modals.js - KISS Modal management (2025 Refactor with Full Logging & Audit Overhaul)
  */
@@ -353,10 +356,10 @@ export function initModals() {
             `<span class="tag-pill" data-testid="tag-pill-modal-${id}-${tag.id}" aria-label="Tag: ${tag.name}" title="Tag: ${tag.name}">${tag.name}</span>`
           ).join('')}
         </div>
-        <div class="prompt-description" data-testid="prompt-detail-description" style="margin-bottom:1.1em;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;text-overflow:ellipsis;">
+        <div class="prompt-description" data-testid="prompt-detail-description" style="margin-bottom:1.1em;">
           ${description}
         </div>
-        <div class="prompt-content" data-testid="prompt-detail-content" style="margin-bottom:1.1em;white-space:pre-line;word-break:break-word;">
+        <div class="prompt-content" data-testid="prompt-detail-content" style="margin-bottom:1.1em;white-space:pre-line;word-break:break-word;max-height:40vh;overflow:auto;">
           ${content}
         </div>
       </div>
@@ -503,7 +506,18 @@ export function initModals() {
             const formData = new FormData(form);
             const data = Object.fromEntries(formData.entries());
             data.category = formData.get('category');
-            data.tags = formData.getAll('tags');
+            // Debug: log tag select state and collected tags
+            const tagSelect = form.querySelector('select[name="tags"]');
+            if (tagSelect) {
+              const selectedOptions = Array.from(tagSelect.options).filter(opt => opt.selected).map(opt => opt.value);
+              debugLog("[DEBUG] Tag select multiple:", tagSelect.multiple);
+              debugLog("[DEBUG] Tag select selected options:", selectedOptions);
+            } else {
+              debugLog("[DEBUG] Tag select element not found in form");
+            }
+            const tagsFromForm = formData.getAll('tags');
+            debugLog("[DEBUG] formData.getAll('tags'):", tagsFromForm);
+            data.tags = tagsFromForm;
             let result = undefined;
             try {
               if (mode === 'edit') {
@@ -742,8 +756,7 @@ export function initModals() {
       }
     });
 
-    // Batch Import Modal event
-    window.addEventListener('openBatchImportModal', openBatchImportModal);
+    // [Legacy batch import modal event listener removed]
   }
 
   // Call centralized event wiring from initModals
@@ -754,7 +767,322 @@ export function initModals() {
   // openBatchImportModal moved to module scope and exported below
 
   // Register event to open batch import modal (not exported, event-based for encapsulation)
-  window.addEventListener('openBatchImportModal', openBatchImportModal);
+      // [Legacy batch import modal event listener removed]
+}
+/**
+ * Minimal, robust, accessible multi-file import modal logic (KISS-style)
+ * Supports .txt, .md, .json (single/array), drag-and-drop, file picker, clear feedback.
+ */
+function initMultiImportModal() {
+  const importModal = document.getElementById('multi-import-modal');
+  const importBody = document.getElementById('multi-import-modal-body');
+  const openBtn = document.getElementById('batch-import-btn');
+  if (!importModal || !importBody || !openBtn) return;
+
+  // Elements inside modal
+  const dropArea = importBody.querySelector('#multi-import-drop-area');
+  const fileInput = importBody.querySelector('#multi-import-file-input');
+  const fileListDiv = importBody.querySelector('#multi-import-file-list');
+  const summaryDiv = importBody.querySelector('#multi-import-summary');
+  const messagesDiv = importBody.querySelector('#multi-import-messages');
+  const submitBtn = importBody.querySelector('#multi-import-submit');
+  const cancelBtn = importBody.querySelector('#multi-import-cancel');
+  const closeBtn = importBody.querySelector('#close-multi-import-modal-btn');
+  const templateLink = importBody.querySelector('#download-import-template-link');
+
+  let selectedFiles = [];
+  let parsedPrompts = [];
+
+  // Utility: Clear all UI state
+  function clearModalState() {
+    selectedFiles = [];
+    parsedPrompts = [];
+    fileInput.value = '';
+    fileListDiv.innerHTML = '';
+    summaryDiv.innerHTML = '';
+    messagesDiv.innerHTML = '';
+  }
+
+  // Utility: Show modal
+  function openModal() {
+    clearModalState();
+    importModal.classList.remove('d-none');
+    importModal.hidden = false;
+    importModal.setAttribute('aria-hidden', 'false');
+    importModal.inert = false;
+    importModal.classList.add('active');
+    document.body.classList.add('modal-open');
+    setTimeout(() => {
+      dropArea.focus();
+    }, 50);
+    trapFocus(importModal);
+  }
+
+  // Utility: Hide modal
+  function closeModal() {
+    importModal.classList.add('d-none');
+    importModal.hidden = true;
+    importModal.setAttribute('aria-hidden', 'true');
+    importModal.inert = true;
+    importModal.classList.remove('active');
+    document.body.classList.remove('modal-open');
+    removeTrapFocus(importModal);
+    clearModalState();
+  }
+
+  // Accessibility: close on Escape
+  addEventListenerOnce(importModal, 'keydown', (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      closeModal();
+    }
+  });
+  // Close on Cancel or X
+  addEventListenerOnce(cancelBtn, 'click', (e) => { e.preventDefault(); closeModal(); });
+  addEventListenerOnce(closeBtn, 'click', (e) => { e.preventDefault(); closeModal(); });
+
+  // Open modal on toolbar button click
+  addEventListenerOnce(openBtn, 'click', (e) => {
+    e.preventDefault();
+    openModal();
+  });
+
+  // Drag-and-drop logic
+  ['dragenter', 'dragover'].forEach(ev =>
+    dropArea.addEventListener(ev, (e) => {
+      e.preventDefault();
+      dropArea.classList.add('dragover');
+    })
+  );
+  ['dragleave', 'drop'].forEach(ev =>
+    dropArea.addEventListener(ev, (e) => {
+      e.preventDefault();
+      dropArea.classList.remove('dragover');
+    })
+  );
+  dropArea.addEventListener('drop', (e) => {
+    e.preventDefault();
+    const files = Array.from(e.dataTransfer.files);
+    handleFiles(files);
+  });
+  // File picker logic
+  fileInput.addEventListener('change', (e) => {
+    const files = Array.from(fileInput.files);
+    handleFiles(files);
+  });
+
+  // Handle file selection
+  function handleFiles(files) {
+    clearModalState();
+    if (!files.length) {
+      messagesDiv.textContent = 'No files selected.';
+      return;
+    }
+    selectedFiles = files;
+    // Show file list
+    fileListDiv.innerHTML = '<ul>' + files.map(f =>
+      `<li>${f.name} <span class="file-type">(${f.type || 'unknown'})</span> <span class="file-size">${(f.size/1024).toFixed(1)} KB</span></li>`
+    ).join('') + '</ul>';
+    // Parse files
+    parseFiles(files);
+  }
+
+  // Helper: Normalize a prompt object to include all required fields with sensible defaults
+  function normalizePromptObject(obj, file = null) {
+    const now = new Date().toISOString();
+    // Use file info for .txt/.md, otherwise use obj fields
+    const ext = file ? file.name.split('.').pop().toLowerCase() : null;
+    const isText = ext === 'txt' || ext === 'md';
+    // Generate a unique id (simple random string)
+    function genId() {
+      return 'imp_' + Math.random().toString(36).slice(2, 10) + '_' + Date.now();
+    }
+    // Use first available category or "Default Category"
+    let defaultCategory = "Default Category";
+    if (window.app && Array.isArray(window.app.categories) && window.app.categories.length) {
+      defaultCategory = window.app.categories[0].id || window.app.categories[0].name || "Default Category";
+    }
+    // Always at least one tag
+    let defaultTags = ["imported"];
+    if (window.app && Array.isArray(window.app.tags) && window.app.tags.length) {
+      defaultTags = [window.app.tags[0].id || window.app.tags[0].name || "imported"];
+    }
+    // Trim and validate description for import normalization
+    let desc = obj.description !== undefined ? String(obj.description).trim() : "";
+    if (desc === "") desc = "No description provided";
+    // Compose normalized object
+    return {
+      schemaVersion: obj.schemaVersion || "1.0",
+      id: obj.id || genId(),
+      title: isText
+        ? (file ? file.name.replace(/\.(txt|md)$/i, '') : "Untitled")
+        : (obj.title || "Untitled"),
+      description: desc,
+      prompt: obj.prompt !== undefined
+        ? obj.prompt
+        : (isText ? (obj.content || (file && file.textContent) || "") : (obj.prompt || obj.content || "")),
+      content: obj.content !== undefined
+        ? obj.content
+        : (isText ? (obj.prompt || (file && file.textContent) || "") : (obj.content || obj.prompt || "")),
+      category: obj.category || defaultCategory,
+      tags: Array.isArray(obj.tags) && obj.tags.length ? obj.tags : defaultTags,
+      user_id: obj.user_id || "localuser",
+      author: obj.author || "batch-import",
+      created_at: obj.created_at || now,
+      updated_at: obj.updated_at || now
+    };
+  }
+
+  // Parse files and build prompt objects
+  async function parseFiles(files) {
+    parsedPrompts = [];
+    let errors = [];
+    for (const file of files) {
+      const ext = file.name.split('.').pop().toLowerCase();
+      try {
+        if (ext === 'json') {
+          const text = await file.text();
+          let data = JSON.parse(text);
+          if (Array.isArray(data)) {
+            data.forEach(obj => {
+              // Always normalize, even if valid
+              const norm = normalizePromptObject(obj);
+              parsedPrompts.push(norm);
+            });
+          } else if (typeof data === 'object') {
+            const norm = normalizePromptObject(data);
+            parsedPrompts.push(norm);
+          } else {
+            errors.push(`File ${file.name}: Not a valid JSON array or object.`);
+          }
+        } else if (ext === 'txt' || ext === 'md') {
+          const text = await file.text();
+          // For .txt/.md, pass file and text as content
+          const norm = normalizePromptObject({ content: text }, file);
+          parsedPrompts.push(norm);
+        } else {
+          errors.push(`Unsupported file type: ${file.name}`);
+        }
+      } catch (err) {
+        errors.push(`Error in file ${file.name}: ${err.message}`);
+      }
+    }
+    // Show summary
+    if (parsedPrompts.length) {
+      summaryDiv.innerHTML = `<b>${parsedPrompts.length}</b> prompt(s) ready to import:<ul>` +
+        parsedPrompts.map((p, i) =>
+          `<li>${p.title ? `<b>${escapeHtml(p.title)}</b>` : 'Untitled'} <span class="type">${p.content ? 'Text' : 'JSON'}</span></li>`
+        ).join('') + '</ul>';
+    } else {
+      summaryDiv.innerHTML = '';
+    }
+    // Show errors
+    if (errors.length) {
+      messagesDiv.innerHTML = errors.map(e => `<div class="error">${escapeHtml(e)}</div>`).join('');
+    } else {
+      messagesDiv.innerHTML = '';
+    }
+  }
+
+  // Validate prompt object schema (minimal: must have title and content)
+  function validatePromptObject(obj) {
+    if (!obj || typeof obj !== 'object') return 'Not an object';
+    if (!obj.title || typeof obj.title !== 'string' || !obj.title.trim()) return 'Missing/invalid title';
+    if (!obj.content || typeof obj.content !== 'string' || !obj.content.trim()) return 'Missing/invalid content';
+    return true;
+  }
+
+  // Escape HTML for safe rendering
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, s => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[s]);
+  }
+
+  // Import action
+  addEventListenerOnce(submitBtn, 'click', async (e) => {
+    e.preventDefault();
+    messagesDiv.innerHTML = '';
+    if (!parsedPrompts.length) {
+      messagesDiv.innerHTML = '<div class="error">No valid prompts to import.</div>';
+      return;
+    }
+    submitBtn.disabled = true;
+    messagesDiv.innerHTML = 'Importing...';
+    try {
+      const result = await importPrompts(parsedPrompts);
+      if (result && result.ok) {
+        messagesDiv.innerHTML = `<div class="success">Imported: <b>${result.imported_count}</b>, Skipped: <b>${result.skipped_count}</b></div>`;
+        if (result.errors && result.errors.length) {
+          messagesDiv.innerHTML += result.errors.map(e =>
+            `<div class="error">Prompt ${e.index !== undefined ? (e.index + 1) : ''} (${escapeHtml(e.title || e.id || 'Untitled')}): ${Array.isArray(e.errors) ? e.errors.join(', ') : e.errors}</div>`
+          ).join('');
+        }
+        setTimeout(() => {
+          closeModal();
+          window.dispatchEvent(new CustomEvent('filterPrompts', { detail: {} }));
+        }, 1200);
+      } else {
+        let errorMsg = '';
+        if (result && result.errors && Array.isArray(result.errors) && result.errors.length) {
+          errorMsg = result.errors.map(e =>
+            `<div class="error">Prompt ${e.index !== undefined ? (e.index + 1) : ''} (${escapeHtml(e.title || e.id || 'Untitled')}): ${Array.isArray(e.errors) ? e.errors.join(', ') : e.errors}</div>`
+          ).join('');
+        }
+        if (result && result.error) {
+          errorMsg += `<div class="error">${escapeHtml(result.error)}</div>`;
+        }
+        messagesDiv.innerHTML = errorMsg || '<div class="error">Import failed.</div>';
+      }
+    } catch (err) {
+      messagesDiv.innerHTML = `<div class="error">Import failed: ${escapeHtml(err.message)}</div>`;
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
+
+  // Accessibility: focus trap helpers (reuse from modal infra)
+  function trapFocus(modal) {
+    const focusableSelectors = [
+      'a[href]', 'area[href]', 'input:not([disabled])', 'select:not([disabled])',
+      'textarea:not([disabled])', 'button:not([disabled])', 'iframe', 'object', 'embed',
+      '[tabindex]:not([tabindex="-1"])', '[contenteditable]'
+    ];
+    const focusableEls = modal.querySelectorAll(focusableSelectors.join(','));
+    if (!focusableEls.length) return;
+    const firstEl = focusableEls[0];
+    const lastEl = focusableEls[focusableEls.length - 1];
+    function handleTrap(e) {
+      if (e.key === 'Tab') {
+        if (e.shiftKey) {
+          if (document.activeElement === firstEl) {
+            e.preventDefault();
+            lastEl.focus();
+          }
+        } else {
+          if (document.activeElement === lastEl) {
+            e.preventDefault();
+            firstEl.focus();
+          }
+        }
+      }
+    }
+    modal.addEventListener('keydown', handleTrap);
+    modal.__trapFocusHandler = handleTrap;
+  }
+  function removeTrapFocus(modal) {
+    if (modal && modal.__trapFocusHandler) {
+      modal.removeEventListener('keydown', modal.__trapFocusHandler);
+      delete modal.__trapFocusHandler;
+    }
+  }
+}
+
+// Initialize the multi-file import modal after DOMContentLoaded
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initMultiImportModal);
+} else {
+  initMultiImportModal();
 }
 
 // === Accessible Confirm and Prompt Modals ===
@@ -765,8 +1093,14 @@ export function initModals() {
  */
 export function showConfirmModal(message) {
   return new Promise((resolve) => {
+    // Remove any existing confirm modal before creating a new one
+    const existing = document.getElementById('confirm-modal');
+    if (existing && existing.parentNode) {
+      existing.parentNode.removeChild(existing);
+    }
     // Create modal elements
     const modal = document.createElement('div');
+    modal.id = 'confirm-modal';
     modal.className = 'modal';
     modal.setAttribute('role', 'dialog');
     modal.setAttribute('aria-modal', 'true');
@@ -928,229 +1262,77 @@ export function showPromptModal(message, defaultValue = '') {
   });
 }
 /**
- * Exported Batch Import Modal Logic for direct import and event-based use.
+ * showFullPromptModal(prompt: object)
+ * Shows a modal with the full prompt content (title, description, content) with scrollbars for large content.
+ * Accessible, responsive, closable via close button, ESC, and clicking outside.
  */
-export function openBatchImportModal() {
-  if (DEBUG_MODALS) { console.log("[DEBUG] openBatchImportModal: START"); }
-  const modal = document.getElementById('batch-import-modal');
-  const body = document.getElementById('batch-import-modal-body');
-  if (!modal || !body) {
-    window.dispatchEvent(new CustomEvent('showToast', { detail: { message: 'Batch import modal not found.', type: 'error' } }));
-    console.log("[DEBUG] openBatchImportModal: END (modal or body not found)");
-    return;
-  }
+export function showFullPromptModal(prompt) {
+  // Remove any existing modal
+  let old = document.getElementById('full-prompt-modal');
+  if (old) old.parentNode.removeChild(old);
 
-  // Add accessibility attributes
+  // Modal container
+  const modal = document.createElement('div');
+  modal.className = 'modal full-prompt-modal';
+  modal.id = 'full-prompt-modal';
   modal.setAttribute('role', 'dialog');
   modal.setAttribute('aria-modal', 'true');
+  modal.setAttribute('aria-labelledby', 'full-prompt-modal-title');
+  modal.tabIndex = -1;
 
   // Modal content
-  body.innerHTML = `
-    <form id="batch-import-form" aria-labelledby="batch-import-modal-title" data-testid="batch-import-form">
-      <h2 id="batch-import-modal-title" tabindex="0">Batch Import Prompts</h2>
-      <p>
-        Upload a JSON file (array of prompts) or paste JSON/text below.<br>
-        <a href="data/prompts-template.json" download tabindex="0" id="download-template-link">Download sample template</a>
-      </p>
-      <label for="batch-import-file" style="font-weight:bold;">Upload JSON file:</label>
-      <input type="file" id="batch-import-file" data-testid="batch-import-file-input" accept=".json,application/json" aria-describedby="batch-import-file-desc" tabindex="0" />
-      <div id="batch-import-file-desc" class="sr-only">Select a JSON file containing an array of prompts.</div>
-      <label for="batch-import-text" style="font-weight:bold;margin-top:1em;">Or paste JSON/text:</label>
-      <textarea id="batch-import-text" data-testid="batch-import-textarea" rows="8" style="width:100%;margin-bottom:0.5em;" aria-describedby="batch-import-text-desc" tabindex="0"></textarea>
-      <div id="batch-import-text-desc" class="sr-only">Paste a JSON array of prompt objects, or plain text.</div>
-      <div id="batch-import-validation" style="color:#b00;margin-bottom:0.5em;" aria-live="polite"></div>
-      <div id="batch-import-summary" style="margin-bottom:0.5em;" aria-live="polite"></div>
-      <div style="display:flex;gap:1em;justify-content:flex-end;">
-        <button type="submit" id="batch-import-submit" data-testid="batch-import-confirm-btn" class="success" aria-label="Submit batch import" tabindex="0">Import</button>
-        <button type="button" id="batch-import-cancel" data-testid="batch-import-cancel-btn" class="secondary" aria-label="Cancel batch import" tabindex="0">Cancel</button>
+  modal.innerHTML = `
+    <div class="modal-content" tabindex="0" style="max-width: 600px; width: 96vw; background: var(--color-bg, #18122B); border-radius: 12px; box-shadow: 0 4px 32px #0008; padding: 2em 1.5em; position: relative; max-height: 80vh; overflow: auto;">
+      <button type="button" class="close-modal" aria-label="Close Full View" style="position:absolute;top:12px;right:12px;font-size:2rem;background:none;border:none;cursor:pointer;">&times;</button>
+      <h2 id="full-prompt-modal-title" style="margin-top:0; margin-bottom:0.7em; font-size:1.5em; overflow-wrap:break-word;">${prompt.title ? String(prompt.title) : 'Untitled'}</h2>
+      <div class="prompt-meta" style="color:var(--color-text-muted,#bcbcbc);font-size:0.98em;margin-bottom:0.7em;">
+        <span>ID: <code>${prompt.id ? String(prompt.id) : ''}</code></span>
+        ${prompt.created_at ? `<span style="margin-left:1em;">Created: ${new Date(prompt.created_at).toLocaleString()}</span>` : ''}
+        ${prompt.author ? `<span style="margin-left:1em;">By: ${String(prompt.author)}</span>` : ''}
       </div>
-    </form>
+      <div class="prompt-description" style="margin-bottom:1.1em; color:var(--color-text,#fff);">${prompt.description ? String(prompt.description) : ''}</div>
+      <div class="prompt-content" style="white-space:pre-line;word-break:break-word;color:var(--color-text,#fff);margin-bottom:1.1em;">${prompt.content ? String(prompt.content) : ''}</div>
+    </div>
   `;
 
-  // Accessibility: focus trap
-  setTimeout(() => {
-    const focusable = modal.querySelectorAll('input, select, textarea, button, a[href], [tabindex]:not([tabindex="-1"])');
-    if (focusable.length) {
-      focusable[0].focus();
-    } else {
-      modal.focus();
-    }
-    if (typeof trapFocus === "function") trapFocus(modal);
-  }, 50);
-
-  // Modal open
-  modal.hidden = false;
-  modal.setAttribute('aria-hidden', 'false');
-  modal.classList.add('active');
+  // Append modal to body
+  document.body.appendChild(modal);
   document.body.classList.add('modal-open');
+  setTimeout(() => { modal.classList.add('active'); modal.focus(); }, 10);
 
-  // Close on cancel
-  const cancelBtn = body.querySelector('#batch-import-cancel');
-  addEventListenerOnce(cancelBtn, 'click', (e) => {
-    e.preventDefault();
-    if (modal.contains(document.activeElement)) {
-      focusFallback();
+  // Focus trap
+  function trapFocus(e) {
+    if (e.key === 'Tab') {
+      const focusable = modal.querySelectorAll('button, [tabindex]:not([tabindex="-1"])');
+      if (!focusable.length) return;
+      const first = focusable[0], last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     }
-    modal.inert = true;
-    modal.hidden = true;
-    modal.setAttribute('aria-hidden', 'true');
-    modal.classList.remove('active');
-    document.body.classList.remove('modal-open');
-    body.innerHTML = '';
-    trackEvent('modal_cancel', { modalType: 'batch_import' });
-    if (typeof removeTrapFocus === "function") removeTrapFocus(modal);
-  });
-
-  // Keyboard: close on Escape
-  addEventListenerOnce(modal, 'keydown', (e) => {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      cancelBtn.click();
-    }
-  });
-
-  // File upload handler
-  let parsedPrompts = [];
-  let lastInputType = null;
-  const fileInput = body.querySelector('#batch-import-file');
-  const textInput = body.querySelector('#batch-import-text');
-  const validationDiv = body.querySelector('#batch-import-validation');
-  const summaryDiv = body.querySelector('#batch-import-summary');
-
-  function validateAndSummarize(prompts) {
-    if (DEBUG_MODALS) { console.log("[DEBUG] validateAndSummarize: START", { prompts }); }
-    let valid = 0, invalid = 0, errors = [];
-    if (!Array.isArray(prompts)) {
-      errors.push('Input is not a JSON array.');
-      console.log("[DEBUG] validateAndSummarize: END (not array)");
-      return { valid, invalid, errors, summary: '' };
-    }
-    prompts.forEach((p, i) => {
-      let errs = [];
-      if (!p || typeof p !== 'object') errs.push('Not an object');
-      if (!p.title || typeof p.title !== 'string' || !p.title.trim()) errs.push('Missing/invalid title');
-      if (!p.content || typeof p.content !== 'string' || !p.content.trim()) errs.push('Missing/invalid content');
-      if (!p.category || typeof p.category !== 'string' || !p.category.trim()) errs.push('Missing/invalid category');
-      if (!Array.isArray(p.tags)) errs.push('Missing/invalid tags');
-      if (errs.length) {
-        invalid++;
-        errors.push(`Prompt ${i + 1}: ${errs.join(', ')}`);
-      } else {
-        valid++;
-      }
-    });
-    let summary = `Valid: <b>${valid}</b>, Invalid: <b>${invalid}</b>`;
-    if (DEBUG_MODALS) { console.log("[DEBUG] validateAndSummarize: END", { valid, invalid, errors, summary }); }
-    return { valid, invalid, errors, summary };
+    if (e.key === 'Escape') close();
   }
+  modal.addEventListener('keydown', trapFocus);
 
-  addEventListenerOnce(fileInput, 'change', async (e) => {
-    validationDiv.textContent = '';
-    summaryDiv.textContent = '';
-    parsedPrompts = [];
-    lastInputType = 'file';
-    const file = fileInput.files[0];
-    if (!file) return;
-    try {
-      const text = await file.text();
-      let data = JSON.parse(text);
-      if (Array.isArray(data)) {
-        parsedPrompts = data;
-      } else if (typeof data === 'object') {
-        parsedPrompts = [data];
-      } else {
-        throw new Error('File does not contain a valid JSON array or object.');
-      }
-      const { valid, invalid, errors, summary } = validateAndSummarize(parsedPrompts);
-      summaryDiv.innerHTML = summary;
-      validationDiv.innerHTML = errors.length ? errors.map(e => `<div>${e}</div>`).join('') : '';
-    } catch (err) {
-      validationDiv.textContent = 'Invalid JSON file: ' + err.message;
-      parsedPrompts = [];
-    }
-  });
+  // Close logic
+  function close() {
+    modal.classList.remove('active');
+    setTimeout(() => {
+      if (modal.parentNode) modal.parentNode.removeChild(modal);
+      document.body.classList.remove('modal-open');
+    }, 120);
+    modal.removeEventListener('keydown', trapFocus);
+    document.removeEventListener('mousedown', onClickOutside);
+  }
+  // Close button
+  modal.querySelector('.close-modal').addEventListener('click', close);
 
-  addEventListenerOnce(textInput, 'input', (e) => {
-    validationDiv.textContent = '';
-    summaryDiv.textContent = '';
-    parsedPrompts = [];
-    lastInputType = 'text';
-    const val = textInput.value.trim();
-    if (!val) return;
-    try {
-      let data = JSON.parse(val);
-      if (Array.isArray(data)) {
-        parsedPrompts = data;
-      } else if (typeof data === 'object') {
-        parsedPrompts = [data];
-      } else {
-        throw new Error('Text is not a valid JSON array or object.');
-      }
-      const { valid, invalid, errors, summary } = validateAndSummarize(parsedPrompts);
-      summaryDiv.innerHTML = summary;
-      validationDiv.innerHTML = errors.length ? errors.map(e => `<div>${e}</div>`).join('') : '';
-    } catch (err) {
-      validationDiv.textContent = 'Invalid JSON: ' + err.message;
-      parsedPrompts = [];
-    }
-  });
+  // Click outside to close
+  function onClickOutside(e) {
+    if (e.target === modal) close();
+  }
+  document.addEventListener('mousedown', onClickOutside);
 
-  // Form submit handler
-  const form = body.querySelector('#batch-import-form');
-  addEventListenerOnce(form, 'submit', async (e) => {
-    e.preventDefault();
-    validationDiv.textContent = '';
-    summaryDiv.textContent = '';
-    if (!parsedPrompts.length) {
-      validationDiv.textContent = 'No valid prompts to import.';
-      return;
-    }
-    const { valid, invalid, errors } = validateAndSummarize(parsedPrompts);
-    if (valid === 0) {
-      validationDiv.innerHTML = errors.map(e => `<div>${e}</div>`).join('');
-      return;
-    }
-    summaryDiv.innerHTML = 'Importing...';
-    trackEvent('modal_confirm', { modalType: 'batch_import', action: 'submit', count: parsedPrompts.length });
-    try {
-      const result = await importPrompts(parsedPrompts);
-      if (result.ok) {
-        summaryDiv.innerHTML = `Imported: <b>${result.imported_count}</b>, Skipped: <b>${result.skipped_count}</b>`;
-        if (result.errors && result.errors.length) {
-          validationDiv.innerHTML = result.errors.map(e =>
-            `<div>Prompt ${e.index + 1} (${e.title || 'Untitled'}): ${e.errors.join(', ')}</div>`
-          ).join('');
-        }
-        window.dispatchEvent(new CustomEvent('showToast', {
-          detail: {
-            message: `Batch import complete: ${result.imported_count} imported, ${result.skipped_count} skipped.`,
-            type: result.skipped_count ? 'warning' : 'success'
-          }
-        }));
-        setTimeout(() => {
-          if (modal.contains(document.activeElement)) {
-            focusFallback();
-          }
-          modal.inert = true;
-          modal.hidden = true;
-          modal.setAttribute('aria-hidden', 'true');
-          modal.classList.remove('active');
-          document.body.classList.remove('modal-open');
-          body.innerHTML = '';
-          if (typeof removeTrapFocus === "function") removeTrapFocus(modal);
-          window.dispatchEvent(new CustomEvent('filterPrompts', { detail: {} }));
-        }, 1200);
-      } else {
-        validationDiv.textContent = result.error || 'Import failed.';
-        trackEvent('modal_error', { modalType: 'batch_import', error: result.error || 'Import failed.' });
-        window.dispatchEvent(new CustomEvent('showToast', { detail: { message: 'Batch import failed.', type: 'error' } }));
-      }
-    } catch (err) {
-      validationDiv.textContent = 'Import failed: ' + err.message;
-      trackEvent('modal_error', { modalType: 'batch_import', error: err.message });
-      window.dispatchEvent(new CustomEvent('showToast', { detail: { message: 'Batch import failed.', type: 'error' } }));
-    }
-  });
-
-  if (DEBUG_MODALS) { console.log("[DEBUG] openBatchImportModal: END"); }
+  // Accessibility: focus modal
+  setTimeout(() => { modal.focus(); }, 30);
 }
+/* [Legacy batch import modal logic removed. New multi-file import modal will be implemented separately.] */

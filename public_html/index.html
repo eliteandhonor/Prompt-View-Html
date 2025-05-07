@@ -37,6 +37,7 @@
     </label>
     <button id="manage-tags-btn" type="button" class="utility" aria-label="Manage Tags" tabindex="0" data-testid="manage-tags-btn">Manage Tags</button>
     <button id="clear-filters-btn" type="button" class="utility ml-1em" aria-label="Clear Filters" tabindex="0" data-testid="clear-filters-btn">Clear Filters</button>
+<button id="refresh-btn" type="button" class="utility ml-1em" aria-label="Refresh Prompts, Tags, and Categories" tabindex="0" data-testid="refresh-btn">Refresh</button>
     <div id="prompt-list-actions" class="d-flex jc-center gap-12 mt-16px">
       <button id="add-prompt-btn" data-testid="add-prompt-btn" type="button" class="success" aria-label="Add Prompt" tabindex="0">＋ <span class="visually-hidden">Add Prompt</span></button>
       <button id="batch-import-btn" data-testid="batch-import-btn" type="button" aria-label="Batch Import Prompts" tabindex="0">⇆ <span class="visually-hidden">Batch Import</span></button>
@@ -76,17 +77,37 @@
     <div class="modal-content" id="crud-modal-body"></div>
   </div>
   <!-- Batch Import Modal (dynamic, managed by modals.js) -->
+  <!-- Multi-File Import Modal (minimal, accessible, managed by modals.js) -->
   <div
-    id="batch-import-modal"
-    class="modal"
-    data-testid="batch-import-modal"
+    id="multi-import-modal"
+    class="modal d-none"
     role="dialog"
     aria-modal="true"
-    aria-labelledby="batch-import-modal-title"
+    aria-labelledby="multi-import-modal-title"
     tabindex="-1"
     hidden
   >
-    <div class="modal-content" id="batch-import-modal-body"></div>
+    <div class="modal-content modal-narrow" id="multi-import-modal-body">
+      <button id="close-multi-import-modal-btn" class="close-modal secondary" aria-label="Close Import Modal" tabindex="0" data-testid="close-multi-import-modal-btn">&times;</button>
+      <h2 id="multi-import-modal-title" tabindex="0">Import Prompts</h2>
+      <p>
+        Import one or more <b>.txt</b>, <b>.md</b>, or <b>.json</b> files.<br>
+        Each .txt/.md file becomes a prompt (title = filename, content = file).<br>
+        <a href="data/prompts-template.json" download tabindex="0" id="download-import-template-link">Download sample template</a>
+      </p>
+      <div id="multi-import-drop-area" tabindex="0" aria-label="Drop files here or use the file picker" class="import-drop-area">
+        <span>Drag and drop files here, or</span>
+        <input type="file" id="multi-import-file-input" accept=".json,.txt,.md,application/json,text/plain,text/markdown" multiple aria-describedby="multi-import-file-desc" tabindex="0" />
+        <div id="multi-import-file-desc" class="sr-only">Select one or more .json, .txt, or .md files. Each .txt/.md file will become a prompt.</div>
+      </div>
+      <div id="multi-import-file-list" class="import-file-list" aria-live="polite"></div>
+      <div id="multi-import-summary" class="import-summary" aria-live="polite"></div>
+      <div id="multi-import-messages" class="import-messages" aria-live="assertive"></div>
+      <div style="display:flex;gap:1em;justify-content:flex-end;margin-top:1em;">
+        <button type="button" id="multi-import-submit" class="success" aria-label="Import selected files" tabindex="0">Import</button>
+        <button type="button" id="multi-import-cancel" class="secondary" aria-label="Cancel import" tabindex="0">Cancel</button>
+      </div>
+    </div>
   </div>
   <!-- Result View Modal -->
   <div
